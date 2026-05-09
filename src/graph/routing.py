@@ -1,13 +1,17 @@
 from src.graph.state import SupportGraphState
 
-_DOMAIN_TO_NODE: dict[str, str] = {
-    "billing": "billing_agent",
-    "technical": "technical_agent",
-    "account": "account_agent",
-    "unknown": "fallback_handler",
-}
+
+def route_supervisor(state: SupportGraphState) -> str:
+    """Route from supervisor: classifiable queries go to security_check, unknown to fallback."""
+    domains = state.get("classified_domains") or []
+    if not domains or domains == ["unknown"]:
+        return "fallback_handler"
+    return "security_check"
 
 
-def route_query(state: SupportGraphState) -> str:
-    domain = state.get("classified_domain") or "unknown"
-    return _DOMAIN_TO_NODE.get(domain, "fallback_handler")
+def route_confidence_check(state: SupportGraphState) -> str:
+    """Route from confidence_check: retry or proceed to response_generator."""
+    confidence = state.get("retrieval_confidence") or {}
+    if confidence.get("should_retry", False):
+        return "retrieval_planner"
+    return "response_generator"

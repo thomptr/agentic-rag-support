@@ -1,0 +1,59 @@
+[
+  {
+    "question": "How do I dispute a charge on my invoice?",
+    "ground_truth": "To dispute a charge, contact billing support within 30 days of the invoice date. Provide your invoice number and the specific charge amount you are disputing. Disputes are reviewed within 5 business days. For charges related to suspected fraud, contact billing support immediately — these are escalated to the fraud team. For disputes exceeding $500, a human billing specialist will handle the case.",
+    "ground_truth_contexts": [
+      "docs/knowledge_base/billing/payment-disputes.md"
+    ],
+    "expected_domains": ["billing"]
+  },
+  {
+    "question": "What are the API rate limits for the Professional plan?",
+    "ground_truth": "The Professional plan allows 300 requests per minute and 100,000 requests per day. Rate limit information is included in every API response via headers: X-RateLimit-Limit (your limit), X-RateLimit-Remaining (remaining requests), and X-RateLimit-Reset (when the window resets). If you exceed the limit, you receive a 429 Too Many Requests response with a Retry-After header.",
+    "ground_truth_contexts": [
+      "docs/knowledge_base/technical/rate-limits.md",
+      "docs/knowledge_base/technical/api-key-management.md"
+    ],
+    "expected_domains": ["technical"]
+  },
+  {
+    "question": "How do I reset my password?",
+    "ground_truth": "To reset your password, click 'Forgot Password' on the login page and enter your email address. You will receive a reset link valid for 30 minutes. If you have MFA enabled, you will need to verify with your authenticator app after setting the new password. If you do not receive the reset email, check your spam folder or contact support.",
+    "ground_truth_contexts": [
+      "docs/knowledge_base/account/login-procedures.md"
+    ],
+    "expected_domains": ["account"]
+  },
+  {
+    "question": "How do I set up MFA on my account?",
+    "ground_truth": "To set up MFA, go to Account Settings → Security → Two-Factor Authentication and click Enable. You can use an authenticator app (Google Authenticator, Authy) or receive SMS codes. Scan the QR code with your authenticator app and enter the 6-digit code to confirm setup. Save the backup codes in a secure location in case you lose access to your authenticator.",
+    "ground_truth_contexts": [
+      "docs/knowledge_base/account/mfa-setup.md"
+    ],
+    "expected_domains": ["account"]
+  },
+  {
+    "question": "What webhook retry policy is used for failed deliveries?",
+    "ground_truth": "When a webhook delivery fails (no 2xx response within 10 seconds), it is retried automatically. Attempt 2 and 3 retry after 5 minutes each. Attempts 4 through 24 retry hourly. After 24 hours with no successful delivery, the event is marked permanently failed. You can manually replay any failed event from the webhook delivery history logs.",
+    "ground_truth_contexts": [
+      "docs/knowledge_base/technical/webhook-configuration.md"
+    ],
+    "expected_domains": ["technical"]
+  },
+  {
+    "question": "What happens if my payment fails?",
+    "ground_truth": "When a payment fails, you receive an immediate email notification. Automatic retries occur every 24 hours for the first 3 days while your account remains fully functional. On days 4-7, your account enters restricted mode with read-only access. After day 8, the account is suspended and login is blocked. Data is retained for 30 days during suspension. To resolve, update your payment method and click Retry Payment on the failed invoice.",
+    "ground_truth_contexts": [
+      "docs/knowledge_base/billing/payment-methods.md"
+    ],
+    "expected_domains": ["billing"]
+  },
+  {
+    "question": "How do I create a new API key with read-only access?",
+    "ground_truth": "To create a read-only API key, navigate to Settings → Developer → API Keys and click Generate New Key. Enter a descriptive name, select Read-only as the permission scope, and click Generate. The key is shown only once — copy it immediately. Store it securely as an environment variable rather than hardcoding it in source code.",
+    "ground_truth_contexts": [
+      "docs/knowledge_base/technical/api-key-management.md"
+    ],
+    "expected_domains": ["technical"]
+  }
+]

@@ -92,3 +92,139 @@ def log_agent_response(
     }
     _log.info("agent_response", **event)
     return event
+
+
+# --- New 002 event helpers ---
+
+
+def log_retrieval_plan(
+    run_id: str,
+    classified_domains: list[str],
+    search_queries: list[dict],
+    query_count: int,
+) -> dict:
+    event = {
+        "event_type": "retrieval_plan",
+        "run_id": run_id,
+        "classified_domains": classified_domains,
+        "search_queries": search_queries,
+        "query_count": query_count,
+    }
+    _log.info("retrieval_plan", **event)
+    return event
+
+
+def log_multi_retrieval(
+    run_id: str,
+    attempt: int,
+    queries_executed: int,
+    total_results: int,
+    unique_results: int,
+    elapsed_ms: float,
+    per_query_counts: list[dict] | None = None,
+) -> dict:
+    event = {
+        "event_type": "multi_retrieval",
+        "run_id": run_id,
+        "attempt": attempt,
+        "queries_executed": queries_executed,
+        "total_results": total_results,
+        "unique_results": unique_results,
+        "elapsed_ms": elapsed_ms,
+        "per_query_counts": per_query_counts or [],
+    }
+    _log.info("multi_retrieval", **event)
+    return event
+
+
+def log_confidence_assessment(
+    run_id: str,
+    attempt: int,
+    score: float,
+    result_count: int,
+    avg_similarity: float,
+    should_retry: bool,
+    reason: str,
+) -> dict:
+    event = {
+        "event_type": "confidence_assessment",
+        "run_id": run_id,
+        "attempt": attempt,
+        "score": score,
+        "result_count": result_count,
+        "avg_similarity": avg_similarity,
+        "should_retry": should_retry,
+        "reason": reason,
+    }
+    _log.info("confidence_assessment", **event)
+    return event
+
+
+def log_retrieval_retry(
+    run_id: str,
+    attempt: int,
+    previous_score: float,
+    adjusted_params: dict,
+) -> dict:
+    event = {
+        "event_type": "retrieval_retry",
+        "run_id": run_id,
+        "attempt": attempt,
+        "previous_score": previous_score,
+        "adjusted_params": adjusted_params,
+    }
+    _log.info("retrieval_retry", **event)
+    return event
+
+
+def log_knowledge_gap(
+    run_id: str,
+    final_attempt: int,
+    final_score: float,
+    reason: str,
+) -> dict:
+    event = {
+        "event_type": "knowledge_gap",
+        "run_id": run_id,
+        "final_attempt": final_attempt,
+        "final_score": final_score,
+        "reason": reason,
+    }
+    _log.info("knowledge_gap", **event)
+    return event
+
+
+def log_security_check(
+    run_id: str,
+    signals: list[dict],
+    action: str,
+    latency_ms: float,
+) -> dict:
+    event = {
+        "event_type": "security_check",
+        "run_id": run_id,
+        "signals": signals,
+        "action": action,
+        "latency_ms": latency_ms,
+    }
+    _log.info("security_check", **event)
+    return event
+
+
+def log_escalation_triggered(
+    run_id: str,
+    signal_name: str,
+    matched_pattern: str,
+    reason: str,
+    agent: str,
+) -> dict:
+    event = {
+        "event_type": "escalation_triggered",
+        "run_id": run_id,
+        "signal_name": signal_name,
+        "matched_pattern": matched_pattern,
+        "reason": reason,
+        "agent": agent,
+    }
+    _log.info("escalation_triggered", **event)
+    return event

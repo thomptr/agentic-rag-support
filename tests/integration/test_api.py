@@ -13,30 +13,60 @@ def client():
     return TestClient(app)
 
 
-@patch("src.graph.workflow.graph")
-def test_post_query_returns_200(mock_graph, client):
-    mock_graph.invoke.return_value = {
-        "query_id": "test-id",
-        "response_text": "Your charge is explained by our pricing plan.",
-        "classified_domain": "billing",
-        "confidence_rationale": "billing charges",
-        "routed_to_agent": "billing_agent",
-        "citations": [
+def _mock_graph_result(
+    classified_domains=None,
+    retrieval_attempt=1,
+    response_text="Your answer.",
+    citations=None,
+    raw_retrieval_results=None,
+    merged_results=None,
+    retrieval_confidence_score=0.85,
+):
+    return {
+        "response_text": response_text,
+        "classified_domain": (classified_domains or ["billing"])[0],
+        "classified_domains": classified_domains or ["billing"],
+        "confidence_rationale": "test rationale",
+        "routed_to_agent": "response_generator",
+        "citations": citations
+        or [
             {
+                "content": "Pricing plan text",
+                "domain": "billing",
+                "source": "pricing-plans.md",
+                "score": 0.9,
                 "doc_id": "d1",
                 "chunk_text": "pricing plan text",
-                "score": 0.9,
                 "title": "Pricing Plans",
-                "source_file": "docs/knowledge_base/billing/pricing-plans.md",
+                "source_file": "pricing-plans.md",
             }
         ],
-        "retrieved_documents": [],
+        "raw_retrieval_results": raw_retrieval_results or [],
+        "merged_results": merged_results or [],
+        "retrieved_documents": merged_results or [],
+        "retrieval_confidence": {
+            "score": retrieval_confidence_score,
+            "result_count": 5,
+            "avg_similarity": retrieval_confidence_score,
+            "should_retry": False,
+            "reason": "sufficient confidence",
+        },
+        "retrieval_attempt": retrieval_attempt,
+        "max_retrieval_attempts": 3,
         "log_events": [
             {"event_type": "routing_decision"},
             {"event_type": "llm_call"},
-            {"event_type": "retrieval"},
+            {"event_type": "multi_retrieval"},
         ],
     }
+
+
+# --- T042: Updated API response schema tests ---
+
+
+@patch("src.api.main.graph")
+def test_post_query_returns_200(mock_graph, client):
+    mock_graph.invoke.return_value = _mock_graph_result()
 
     response = client.post("/query", json={"query_text": "Why was I charged twice?"})
     assert response.status_code == 200
@@ -47,17 +77,98 @@ def test_post_query_returns_200(mock_graph, client):
     assert "metadata" in data
 
 
-@patch("src.graph.workflow.graph")
+@patch("src.api.main.graph")
+def test_post_query_returns_classified_domains(mock_graph, client):
+    mock_graph.invoke.return_value = _mock_graph_result(classified_domains=["billing", "account"])
+
+    response = client.post(
+        "/query", json={"query_text": "I was charged twice and my account is locked"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "classified_domains" in data["metadata"]
+    assert isinstance(data["metadata"]["classified_domains"], list)
+    assert len(data["metadata"]["classified_domains"]) == 2
+
+
+@patch("src.api.main.graph")
+def test_post_query_returns_retrieval_attempts(mock_graph, client):
+    mock_graph.invoke.return_value = _mock_graph_result(retrieval_attempt=2)
+
+    response = client.post("/query", json={"query_text": "difficult query"})
+    assert response.status_code == 200
+    data = response.json()
+    assert "retrieval_attempts" in data["metadata"]
+    assert data["metadata"]["retrieval_attempts"] == 2
+
+
+@patch("src.api.main.graph")
+def test_post_query_returns_documents_retrieved(mock_graph, client):
+    mock_graph.invoke.return_value = _mock_graph_result(
+        raw_retrieval_results=[{"content": f"doc {i}"} for i in range(8)],
+        merged_results=[{"content": f"doc {i}"} for i in range(6)],
+    )
+
+    response = client.post("/query", json={"query_text": "billing question"})
+    assert response.status_code == 200
+    data = response.json()
+    assert "documents_retrieved" in data["metadata"]
+    assert data["metadata"]["documents_retrieved"] == 8
+    assert "documents_after_dedup" in data["metadata"]
+    assert data["metadata"]["documents_after_dedup"] == 6
+
+
+@patch("src.api.main.graph")
+def test_post_query_returns_retrieval_confidence(mock_graph, client):
+    mock_graph.invoke.return_value = _mock_graph_result(retrieval_confidence_score=0.87)
+
+    response = client.post("/query", json={"query_text": "billing question"})
+    assert response.status_code == 200
+    data = response.json()
+    assert "retrieval_confidence" in data["metadata"]
+    assert abs(data["metadata"]["retrieval_confidence"] - 0.87) < 0.001
+
+
+@patch("src.api.main.graph")
+def test_post_query_citations_include_domain(mock_graph, client):
+    mock_graph.invoke.return_value = _mock_graph_result(
+        citations=[
+            {
+                "content": "Billing doc",
+                "domain": "billing",
+                "source": "payment-disputes.md",
+                "score": 0.92,
+                "doc_id": "d1",
+                "chunk_text": "Billing doc",
+                "title": "Payment Disputes",
+                "source_file": "payment-disputes.md",
+            },
+            {
+                "content": "Account doc",
+                "domain": "account",
+                "source": "login-procedures.md",
+                "score": 0.89,
+                "doc_id": "d2",
+                "chunk_text": "Account doc",
+                "title": "Login Procedures",
+                "source_file": "login-procedures.md",
+            },
+        ]
+    )
+
+    response = client.post("/query", json={"query_text": "cross domain query"})
+    assert response.status_code == 200
+    data = response.json()
+    citations = data["citations"]
+    assert len(citations) == 2
+    for citation in citations:
+        assert "domain" in citation
+        assert "score" in citation
+
+
+@patch("src.api.main.graph")
 def test_post_query_response_schema(mock_graph, client):
-    mock_graph.invoke.return_value = {
-        "response_text": "Technical answer",
-        "classified_domain": "technical",
-        "confidence_rationale": "API issue",
-        "routed_to_agent": "technical_agent",
-        "citations": [],
-        "retrieved_documents": [],
-        "log_events": [],
-    }
+    mock_graph.invoke.return_value = _mock_graph_result()
 
     response = client.post("/query", json={"query_text": "How do I fix a 401 error?"})
     assert response.status_code == 200

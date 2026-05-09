@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
 
@@ -13,6 +15,7 @@ def get_embeddings() -> OpenAIEmbeddings:
     )
 
 
+@lru_cache(maxsize=1)
 def get_vector_store() -> PGVector:
     embeddings = get_embeddings()
     return PGVector(

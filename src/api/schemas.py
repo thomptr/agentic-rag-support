@@ -7,19 +7,28 @@ class QueryRequest(BaseModel):
 
 
 class CitationResponse(BaseModel):
-    doc_id: str
-    chunk_text: str
-    score: float
+    content: str = ""
+    domain: str = ""
+    source: str = ""
+    score: float = 0.0
+    # Legacy fields preserved for backwards compatibility
+    doc_id: str = ""
+    chunk_text: str = ""
     title: str = ""
     source_file: str = ""
 
 
 class QueryMetadata(BaseModel):
-    classified_domain: str | None
+    classified_domain: str | None = None
+    classified_domains: list[str] = []
     run_id: str
     total_latency_ms: float
     llm_calls: int
     retrieval_calls: int
+    retrieval_attempts: int = 0
+    documents_retrieved: int = 0
+    documents_after_dedup: int = 0
+    retrieval_confidence: float | None = None
 
 
 class QueryResponse(BaseModel):
