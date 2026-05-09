@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    name: Lint & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Lint (ruff check)
+        run: ruff check src/ tests/
+
+      - name: Lint (ruff format)
+        run: ruff format --check src/ tests/
+
+      - name: Unit tests
+        run: pytest tests/unit/ -v --tb=short
+        env:
+          OPENAI_API_KEY: sk-fake
+          DATABASE_URL: postgresql+psycopg://unused:unused@localhost:5432/unused
+          LLM_MODEL: gpt-4o-mini
+          EMBEDDING_MODEL: text-embedding-3-small
+          LOG_LEVEL: INFO
+
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: agentic_rag
+          POSTGRES_PASSWORD: agentic_rag_dev
+          POSTGRES_DB: agentic_rag
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agentic_rag"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Init database schema
+        run: psql $DATABASE_URL -f scripts/init.sql
+        env:
+          DATABASE_URL: postgresql://agentic_rag:agentic_rag_dev@localhost:5432/agentic_rag
+
+      - name: Integration tests
+        run: pytest tests/integration/ -v --tb=short -m integration
+        env:
+          OPENAI_API_KEY: sk-fake
+          DATABASE_URL: postgresql+psycopg://agentic_rag:agentic_rag_dev@localhost:5432/agentic_rag
+          LLM_MODEL: gpt-4o-mini
+          EMBEDDING_MODEL: text-embedding-3-small
+          LOG_LEVEL: INFO
