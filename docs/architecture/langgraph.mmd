@@ -1,0 +1,53 @@
+%% LangGraph agent topology — agentic RAG support graph.
+%% Nodes returning langgraph.types.Command (conditional routing) are shown
+%% with dashed outgoing edges. Solid edges are unconditional.
+
+flowchart TD
+    START([START]) --> supervisor
+
+    subgraph classification[Classification & Policy]
+        supervisor[supervisor<br/><i>classify domains</i>]
+        security_check[security_check<br/><i>policy gate</i>]
+    end
+
+    subgraph retrieval[Retrieval Pipeline]
+        retrieval_planner[retrieval_planner<br/><i>generate search queries</i>]
+        multi_retriever[multi_retriever<br/><i>cross-domain pgvector search</i>]
+        confidence_check[confidence_check<br/><i>score retrieval quality</i>]
+    end
+
+    subgraph generation[Response Generation]
+        response_generator[response_generator<br/><i>grounded answer + citations</i>]
+        validate_response[validate_response]
+    end
+
+    fallback_handler[fallback_handler<br/><i>unroutable queries</i>]
+    escalation_handler[escalation_handler<br/><i>route to human / security team</i>]
+
+    END_NODE([END])
+
+    supervisor -.->|classifiable| security_check
+    supervisor -.->|unknown| fallback_handler
+
+    security_check -.->|safe| retrieval_planner
+    security_check -.->|escalate| escalation_handler
+
+    retrieval_planner --> multi_retriever
+    multi_retriever --> confidence_check
+
+    confidence_check -.->|retry| retrieval_planner
+    confidence_check -.->|sufficient| response_generator
+
+    response_generator --> validate_response
+    validate_response --> END_NODE
+
+    fallback_handler --> END_NODE
+    escalation_handler --> END_NODE
+
+    classDef policyNode fill:#fef3c7,stroke:#d97706,stroke-width:2px
+    classDef pipelineNode fill:#dbeafe,stroke:#2563eb,stroke-width:1px
+    classDef terminalNode fill:#fee2e2,stroke:#dc2626,stroke-width:1px
+
+    class supervisor,security_check policyNode
+    class retrieval_planner,multi_retriever,confidence_check,response_generator,validate_response pipelineNode
+    class fallback_handler,escalation_handler terminalNode

@@ -1,0 +1,49 @@
+[
+  {
+    "question": "What is the meaning of life?",
+    "ground_truth": "This question is outside the scope of our customer support knowledge base. There is no relevant documentation to answer philosophical questions. A support agent should acknowledge the knowledge gap and suggest contacting human support if the customer has an actual product-related question.",
+    "ground_truth_contexts": [],
+    "expected_domains": ["unknown"],
+    "scenario": "sparse_coverage",
+    "notes": "Tests knowledge gap acknowledgment — no relevant docs exist"
+  },
+  {
+    "question": "I want to cancel my subscription but also need to upgrade to get more API access before I cancel",
+    "ground_truth": "This query contains a self-contradictory intent: the customer wants to both upgrade (to get more API access) and cancel. The system should retrieve relevant documentation for both upgrade (subscription management, rate limits) and cancellation (cancellation terms). The response should address both needs: explain how to upgrade to Professional for API access and separately explain the cancellation process including data retention.",
+    "ground_truth_contexts": [
+      "docs/knowledge_base/billing/subscription-management.md",
+      "docs/knowledge_base/billing/cancellation-terms.md",
+      "docs/knowledge_base/technical/rate-limits.md"
+    ],
+    "expected_domains": ["billing", "technical"],
+    "scenario": "contradictory_intent",
+    "notes": "Tests handling of contradictory user intents in a single query"
+  },
+  {
+    "question": "How do I install the Python SDK, set up webhooks, add team members, manage billing, export data, and configure rate limit handling all at once?",
+    "ground_truth": "This query spans all three domains (technical, account, billing) and multiple topics. The system should retrieve documents covering SDK installation, webhook setup, team management, billing/subscription, data export, and rate limit handling. The response should be organized by topic area. This tests the system's ability to handle context overflow — 20 document cap may mean some topics receive fewer retrieved chunks.",
+    "ground_truth_contexts": [
+      "docs/knowledge_base/technical/sdk-quickstart.md",
+      "docs/knowledge_base/technical/webhook-configuration.md",
+      "docs/knowledge_base/account/team-management.md",
+      "docs/knowledge_base/billing/subscription-management.md",
+      "docs/knowledge_base/account/data-export-procedures.md",
+      "docs/knowledge_base/technical/rate-limits.md"
+    ],
+    "expected_domains": ["technical", "account", "billing"],
+    "scenario": "context_overflow",
+    "notes": "Tests MAX_CONTEXT_DOCUMENTS cap with many relevant documents"
+  },
+  {
+    "question": "Do I get a refund if I delete my account mid-cycle on an annual Professional plan?",
+    "ground_truth": "Yes. For annual plan customers who delete their account, unused prepaid amounts are refunded pro-rata. Refund processing takes 5-10 business days. The account enters a 90-day data retention window before permanent deletion. Any outstanding balance must be resolved before deletion can complete. The final invoice for the current period is generated at deletion.",
+    "ground_truth_contexts": [
+      "docs/knowledge_base/account/account-deletion.md",
+      "docs/knowledge_base/billing/refund-eligibility.md",
+      "docs/knowledge_base/billing/cancellation-terms.md"
+    ],
+    "expected_domains": ["account", "billing"],
+    "scenario": "cross_domain_precise",
+    "notes": "Tests precise cross-domain retrieval requiring both account deletion and refund policies"
+  }
+]

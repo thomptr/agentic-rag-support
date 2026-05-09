@@ -1,0 +1,60 @@
+[
+  {
+    "question": "I was charged twice and now my account is locked",
+    "ground_truth": "For duplicate charges, you can dispute the charge within 30 days by contacting billing support with your invoice number. For a locked account, you can regain access by verifying your identity through security questions or resetting via MFA. If your account was locked due to payment failure, update your payment method and retry the failed payment to restore access within 15 minutes.",
+    "ground_truth_contexts": [
+      "docs/knowledge_base/billing/payment-disputes.md",
+      "docs/knowledge_base/account/login-procedures.md",
+      "docs/knowledge_base/billing/payment-methods.md"
+    ],
+    "expected_domains": ["billing", "account"]
+  },
+  {
+    "question": "My API calls are failing with 429 errors and I need to change my credit card",
+    "ground_truth": "A 429 Too Many Requests error means you have exceeded your plan's rate limit. Implement exponential backoff — wait approximately 2 seconds after the first failure, doubling each retry. The Retry-After response header tells you exactly how long to wait. To update your credit card, go to Account Settings → Billing → Payment Methods and add a new card, then set it as Primary.",
+    "ground_truth_contexts": [
+      "docs/knowledge_base/technical/rate-limits.md",
+      "docs/knowledge_base/billing/payment-methods.md"
+    ],
+    "expected_domains": ["technical", "billing"]
+  },
+  {
+    "question": "How do I add a team member and what will it cost on the Professional plan?",
+    "ground_truth": "To add a team member on the Professional plan, go to Account Settings → Team, click Invite Member, enter their email, select a role (Admin, Member, or Viewer), and send the invitation. The Professional plan includes 25 seats. Adding a member mid-cycle does not trigger an immediate charge on Professional — billing adjusts at the next cycle. If you exceed 25 seats, you must upgrade to Enterprise.",
+    "ground_truth_contexts": [
+      "docs/knowledge_base/account/team-management.md",
+      "docs/knowledge_base/billing/subscription-management.md",
+      "docs/knowledge_base/billing/pricing-plans.md"
+    ],
+    "expected_domains": ["account", "billing"]
+  },
+  {
+    "question": "What happens to my webhooks if I downgrade from Professional to Basic?",
+    "ground_truth": "Downgrading from Professional to Basic eliminates webhook access entirely. The Basic plan does not support webhooks. Webhook endpoints will be disabled at the end of your current billing period when the downgrade takes effect. You should export your webhook configuration and migrate to a polling approach before downgrading. The downgrade itself takes effect at the end of the billing period, so your webhooks continue to function until then.",
+    "ground_truth_contexts": [
+      "docs/knowledge_base/technical/webhook-configuration.md",
+      "docs/knowledge_base/billing/subscription-management.md"
+    ],
+    "expected_domains": ["technical", "billing"]
+  },
+  {
+    "question": "I want to cancel my account and export my data before it's deleted",
+    "ground_truth": "To export your data, go to Account Settings → Data → Export, select JSON format for complete data fidelity, and click Request Export. Processing takes up to 24 hours for large accounts. After canceling, your account enters the paid period's remainder, then a 90-day data retention window during which you can still export. After 90 days, all data is permanently deleted. We strongly recommend exporting all data before account deletion.",
+    "ground_truth_contexts": [
+      "docs/knowledge_base/account/data-export-procedures.md",
+      "docs/knowledge_base/account/account-deletion.md",
+      "docs/knowledge_base/billing/cancellation-terms.md"
+    ],
+    "expected_domains": ["account", "billing"]
+  },
+  {
+    "question": "My team member set up webhooks but now they're leaving. What do I need to do?",
+    "ground_truth": "When removing a team member, their access is revoked immediately but API keys they created are not automatically revoked. Review and revoke their API keys in Settings → Developer → API Keys. Webhook configurations they created will remain active but the signing secrets should be rotated for security. Go to Settings → Developer → Webhooks, click on each endpoint, and regenerate the signing secret.",
+    "ground_truth_contexts": [
+      "docs/knowledge_base/account/team-management.md",
+      "docs/knowledge_base/technical/webhook-configuration.md",
+      "docs/knowledge_base/technical/api-key-management.md"
+    ],
+    "expected_domains": ["account", "technical"]
+  }
+]

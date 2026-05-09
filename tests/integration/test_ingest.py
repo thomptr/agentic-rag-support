@@ -1,9 +1,19 @@
 import pytest
 
+from src.config import settings
 from src.db.connection import get_vector_store
 from src.rag.ingest import ingest_domain
 
-pytestmark = pytest.mark.integration
+_KEY = settings.openai_api_key
+_KEY_LOOKS_FAKE = (not _KEY) or _KEY.startswith("sk-fake") or len(_KEY) < 20
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        _KEY_LOOKS_FAKE,
+        reason="test_ingest.py exercises real OpenAI embeddings — set a valid OPENAI_API_KEY to run",
+    ),
+]
 
 
 @pytest.fixture(scope="module")

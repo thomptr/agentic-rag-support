@@ -1,12 +1,13 @@
-from src.graph.routing import route_query
+from src.graph.routing import route_confidence_check, route_supervisor
 
 
-def _make_state(domain):
+def _make_state_with_domains(domains=None, confidence=None, retrieval_attempt=1):
     return {
         "query_id": "test-id",
         "query_text": "test query",
         "messages": [],
-        "classified_domain": domain,
+        "classified_domain": (domains or ["unknown"])[0] if domains else "unknown",
+        "classified_domains": domains,
         "confidence_rationale": "test",
         "routed_to_agent": None,
         "retrieved_documents": None,
@@ -14,32 +15,56 @@ def _make_state(domain):
         "citations": None,
         "run_id": "run-1",
         "log_events": [],
+        "search_queries": None,
+        "raw_retrieval_results": None,
+        "merged_results": None,
+        "retrieval_confidence": confidence,
+        "retrieval_attempt": retrieval_attempt,
+        "max_retrieval_attempts": 3,
     }
 
 
-def test_billing_routes_to_billing_agent():
-    assert route_query(_make_state("billing")) == "billing_agent"
+class TestRouteSupervisor:
+    def test_billing_routes_to_security_check(self):
+        state = _make_state_with_domains(["billing"])
+        assert route_supervisor(state) == "security_check"
+
+    def test_technical_routes_to_security_check(self):
+        state = _make_state_with_domains(["technical"])
+        assert route_supervisor(state) == "security_check"
+
+    def test_account_routes_to_security_check(self):
+        state = _make_state_with_domains(["account"])
+        assert route_supervisor(state) == "security_check"
+
+    def test_unknown_routes_to_fallback(self):
+        state = _make_state_with_domains(["unknown"])
+        assert route_supervisor(state) == "fallback_handler"
+
+    def test_none_domains_routes_to_fallback(self):
+        state = _make_state_with_domains(None)
+        assert route_supervisor(state) == "fallback_handler"
+
+    def test_multi_domain_routes_to_security_check(self):
+        state = _make_state_with_domains(["billing", "account"])
+        assert route_supervisor(state) == "security_check"
+
+    def test_empty_domains_routes_to_fallback(self):
+        state = _make_state_with_domains([])
+        assert route_supervisor(state) == "fallback_handler"
 
 
-def test_technical_routes_to_technical_agent():
-    assert route_query(_make_state("technical")) == "technical_agent"
+class TestRouteConfidenceCheck:
+    def test_should_retry_routes_to_security_check(self):
+        confidence = {"should_retry": True, "score": 0.3, "reason": "low similarity"}
+        state = _make_state_with_domains(["billing"], confidence=confidence)
+        assert route_confidence_check(state) == "retrieval_planner"
 
+    def test_sufficient_confidence_routes_to_response_generator(self):
+        confidence = {"should_retry": False, "score": 0.85, "reason": "sufficient"}
+        state = _make_state_with_domains(["billing"], confidence=confidence)
+        assert route_confidence_check(state) == "response_generator"
 
-def test_account_routes_to_account_agent():
-    assert route_query(_make_state("account")) == "account_agent"
-
-
-def test_unknown_routes_to_fallback():
-    assert route_query(_make_state("unknown")) == "fallback_handler"
-
-
-def test_none_domain_routes_to_fallback():
-    state = _make_state(None)
-    assert route_query(state) == "fallback_handler"
-
-
-def test_all_valid_domains_have_routes():
-    domains = ["billing", "technical", "account", "unknown"]
-    expected = ["billing_agent", "technical_agent", "account_agent", "fallback_handler"]
-    for domain, expected_node in zip(domains, expected):
-        assert route_query(_make_state(domain)) == expected_node
+    def test_no_confidence_defaults_to_response_generator(self):
+        state = _make_state_with_domains(["billing"], confidence=None)
+        assert route_confidence_check(state) == "response_generator"

@@ -1,4 +1,4 @@
-.PHONY: up down seed lint lint-fix test test-unit test-int run all
+.PHONY: up down seed lint lint-fix test test-unit test-int test-evals run all
 
 up:
 	docker compose up -d
@@ -25,6 +25,9 @@ test-unit:
 
 test-int:
 	.venv/bin/pytest tests/integration/
+
+test-evals:
+	.venv/bin/pytest tests/evals/ -v
 
 run:
 	uvicorn src.api.main:app --reload

@@ -17,15 +17,13 @@ from src.graph.workflow import graph
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: verify DB connection and vector store on first request
-    # For now, we initialize lazily to avoid blocking startup
     yield
 
 
 app = FastAPI(
     title="Agentic RAG Support",
     description="LangGraph supervisor agent for customer support",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -43,6 +41,7 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
         "query_text": request.query_text,
         "messages": [],
         "classified_domain": None,
+        "classified_domains": None,
         "confidence_rationale": None,
         "routed_to_agent": None,
         "retrieved_documents": None,
@@ -50,6 +49,12 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
         "citations": None,
         "run_id": run_id,
         "log_events": [],
+        "search_queries": None,
+        "raw_retrieval_results": None,
+        "merged_results": None,
+        "retrieval_confidence": None,
+        "retrieval_attempt": 0,
+        "max_retrieval_attempts": settings.max_retrieval_attempts,
     }
 
     start = time.perf_counter()
@@ -58,19 +63,26 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
 
     log_events = result.get("log_events", [])
     llm_calls = sum(1 for e in log_events if e.get("event_type") == "llm_call")
-    retrieval_calls = sum(1 for e in log_events if e.get("event_type") == "retrieval")
+    retrieval_calls = sum(1 for e in log_events if e.get("event_type") == "multi_retrieval")
 
     raw_citations = result.get("citations") or []
     citations = [
         CitationResponse(
-            doc_id=c.get("doc_id", ""),
-            chunk_text=c.get("chunk_text", ""),
+            content=c.get("content", c.get("chunk_text", "")),
+            domain=c.get("domain", ""),
+            source=c.get("source", c.get("source_file", "")),
             score=float(c.get("score", 0.0)),
+            doc_id=c.get("doc_id", ""),
+            chunk_text=c.get("chunk_text", c.get("content", "")),
             title=c.get("title", ""),
-            source_file=c.get("source_file", ""),
+            source_file=c.get("source_file", c.get("source", "")),
         )
         for c in raw_citations
     ]
+
+    retrieval_confidence_val = result.get("retrieval_confidence") or {}
+    raw_retrieval_results = result.get("raw_retrieval_results") or []
+    merged_results = result.get("merged_results") or []
 
     return QueryResponse(
         query_id=query_id,
@@ -80,10 +92,15 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
         citations=citations,
         metadata=QueryMetadata(
             classified_domain=result.get("classified_domain"),
+            classified_domains=result.get("classified_domains") or [],
             run_id=run_id,
             total_latency_ms=round(total_latency_ms, 2),
             llm_calls=llm_calls,
             retrieval_calls=retrieval_calls,
+            retrieval_attempts=result.get("retrieval_attempt", 0),
+            documents_retrieved=len(raw_retrieval_results),
+            documents_after_dedup=len(merged_results),
+            retrieval_confidence=retrieval_confidence_val.get("score"),
         ),
     )
 
