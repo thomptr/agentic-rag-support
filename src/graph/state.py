@@ -15,6 +15,7 @@ class SupportGraphState(TypedDict):
     # --- Existing fields (from 001) ---
     query_id: str
     query_text: str
+    session_id: str | None
 
     messages: Annotated[list[BaseMessage], add_messages]
 
@@ -59,3 +60,15 @@ class SupportGraphState(TypedDict):
     security_signals: list[dict] | None
     escalation_required: bool | None
     escalation_reason: str | None
+
+    # --- Tool execution state (003) ---
+    # Planned tool invocations from action_planner
+    tool_calls: list[dict] | None
+    # Executed tool results (accumulated across turns)
+    tool_results: Annotated[list[dict], _accumulate] | None
+    # High-risk actions awaiting human review
+    pending_approvals: list[dict] | None
+    # Whether any tool was executed this turn
+    action_taken: bool | None
+    # Flag set by response_generator when tool action is needed
+    action_needed: bool | None

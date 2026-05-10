@@ -23,5 +23,11 @@ class Settings(BaseSettings):
     max_context_documents: int = 20
     multi_query_count: int = 3
 
+    # Tool execution settings (003)
+    tool_rate_limit_per_minute: int = 10
+    tool_dollar_cap: float = 100.0
+    approval_timeout_seconds: int = 300
+    tool_execution_enabled: bool = True
+
 
 settings = Settings()

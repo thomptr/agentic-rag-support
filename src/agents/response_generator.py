@@ -95,10 +95,12 @@ def response_generator(state: SupportGraphState) -> dict:
             latency_ms=latency_ms,
         )
 
+        action_needed = _detect_action_needed(query_text)
         return {
             "response_text": response_text,
             "citations": [],
             "routed_to_agent": "response_generator",
+            "action_needed": action_needed,
             "log_events": [gap_event, llm_event],
         }
 
@@ -162,9 +164,33 @@ def response_generator(state: SupportGraphState) -> dict:
         citation_count=len(citations),
     )
 
+    # Detect whether tool action is needed based on query intent
+    action_needed = _detect_action_needed(query_text)
+
     return {
         "response_text": response_text,
         "citations": citations,
         "routed_to_agent": "response_generator",
+        "action_needed": action_needed,
         "log_events": [llm_event, response_event],
     }
+
+
+_ACTION_KEYWORDS = (
+    "status of my order",
+    "order status",
+    "where is my order",
+    "track my order",
+    "create a ticket",
+    "open a ticket",
+    "submit a ticket",
+    "create a support ticket",
+    "refund",
+    "cancel my order",
+)
+
+
+def _detect_action_needed(query_text: str) -> bool:
+    """Return True if the query contains keywords suggesting a tool action is needed."""
+    lowered = query_text.lower()
+    return any(kw in lowered for kw in _ACTION_KEYWORDS)
