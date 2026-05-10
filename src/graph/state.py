@@ -72,3 +72,7 @@ class SupportGraphState(TypedDict):
     action_taken: bool | None
     # Flag set by response_generator when tool action is needed
     action_needed: bool | None
+
+    # --- Per-request overrides (004: frontend) ---
+    guardrails_enabled: bool | None  # None = use server default
+    model_override: str | None  # None = use server default

@@ -13,6 +13,21 @@ def action_executor(state: SupportGraphState) -> dict:
     session_id = state.get("session_id") or state.get("query_id") or "unknown"
     response_text = state.get("response_text") or ""
 
+    # Per-request guardrails override (False = disable tool execution entirely)
+    guardrails_enabled = state.get("guardrails_enabled")
+    if guardrails_enabled is False:
+        return {
+            "tool_results": [],
+            "pending_approvals": [],
+            "action_taken": False,
+            "log_events": [
+                {
+                    "event_type": "guardrails_disabled",
+                    "message": "Tool execution disabled by request",
+                }
+            ],
+        }
+
     if not tool_calls:
         return {
             "tool_results": [],

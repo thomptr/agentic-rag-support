@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field
 class QueryRequest(BaseModel):
     query_text: str = Field(..., min_length=1, max_length=10000)
     session_id: str | None = None
+    guardrails_enabled: bool | None = None
+    model_override: str | None = None
 
 
 class CitationResponse(BaseModel):
