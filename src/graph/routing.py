@@ -15,3 +15,10 @@ def route_confidence_check(state: SupportGraphState) -> str:
     if confidence.get("should_retry", False):
         return "retrieval_planner"
     return "response_generator"
+
+
+def route_response_generator(state: SupportGraphState) -> str:
+    """Route from response_generator: action needed → action_planner, else → validate_response."""
+    if state.get("action_needed"):
+        return "action_planner"
+    return "validate_response"

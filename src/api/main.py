@@ -5,11 +5,18 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 
 from src.api.schemas import (
+    ApprovalItem,
+    ApprovalListResponse,
+    ApprovalResponse,
+    ApproveRequest,
     CitationResponse,
     HealthResponse,
     QueryMetadata,
     QueryRequest,
     QueryResponse,
+    RejectRequest,
+    RejectResponse,
+    ToolCallResult,
 )
 from src.config import settings
 from src.graph.workflow import graph
@@ -36,6 +43,8 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
     query_id = str(uuid.uuid4())
     run_id = str(uuid.uuid4())
 
+    session_id = request.session_id or query_id
+
     initial_state = {
         "query_id": query_id,
         "query_text": request.query_text,
@@ -55,6 +64,13 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
         "retrieval_confidence": None,
         "retrieval_attempt": 0,
         "max_retrieval_attempts": settings.max_retrieval_attempts,
+        # Tool execution state (003)
+        "session_id": session_id,
+        "tool_calls": None,
+        "tool_results": None,
+        "pending_approvals": None,
+        "action_taken": None,
+        "action_needed": None,
     }
 
     start = time.perf_counter()
@@ -84,6 +100,32 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
     raw_retrieval_results = result.get("raw_retrieval_results") or []
     merged_results = result.get("merged_results") or []
 
+    raw_tool_results = result.get("tool_results") or []
+    tool_calls_resp = [
+        ToolCallResult(
+            tool_name=tr.get("tool_name", ""),
+            status=tr.get("status", ""),
+            result=tr.get("result"),
+            error=tr.get("error"),
+            block_reason=tr.get("block_reason"),
+            approval_id=tr.get("approval_id"),
+        )
+        for tr in raw_tool_results
+    ]
+
+    raw_pending = result.get("pending_approvals") or []
+    pending_approvals_resp = [
+        ApprovalItem(
+            id=p.get("id", ""),
+            tool_name=p.get("tool_name", ""),
+            parameters=p.get("parameters", {}),
+            status=p.get("status", "pending"),
+            created_at=p.get("created_at", ""),
+            expires_at=p.get("expires_at", ""),
+        )
+        for p in raw_pending
+    ]
+
     return QueryResponse(
         query_id=query_id,
         response_text=result.get("response_text") or "",
@@ -102,6 +144,66 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
             documents_after_dedup=len(merged_results),
             retrieval_confidence=retrieval_confidence_val.get("score"),
         ),
+        tool_calls=tool_calls_resp,
+        action_taken=bool(result.get("action_taken")),
+        pending_approvals=pending_approvals_resp,
+    )
+
+
+@app.get("/approvals", response_model=ApprovalListResponse)
+async def list_approvals() -> ApprovalListResponse:
+    from src.tools.approval import list_pending
+
+    pending = list_pending()
+    items = [
+        ApprovalItem(
+            id=a.id,
+            tool_name=a.tool_name,
+            parameters=a.parameters,
+            status=a.status,
+            created_at=a.created_at.isoformat(),
+            expires_at=a.expires_at.isoformat(),
+        )
+        for a in pending
+    ]
+    return ApprovalListResponse(approvals=items)
+
+
+@app.post("/approvals/{approval_id}/approve", response_model=ApprovalResponse)
+async def approve_action(approval_id: str, request: ApproveRequest) -> ApprovalResponse:
+    from src.tools.approval import approve
+
+    try:
+        result = approve(approval_id, reviewer=request.reviewer, reason=request.reason)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Approval '{approval_id}' not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    return ApprovalResponse(
+        id=result["id"],
+        status=result["status"],
+        tool_name=result["tool_name"],
+        result=result.get("result"),
+        error=result.get("error"),
+    )
+
+
+@app.post("/approvals/{approval_id}/reject", response_model=RejectResponse)
+async def reject_action(approval_id: str, request: RejectRequest) -> RejectResponse:
+    from src.tools.approval import reject
+
+    try:
+        result = reject(approval_id, reviewer=request.reviewer, reason=request.reason)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Approval '{approval_id}' not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    return RejectResponse(
+        id=result["id"],
+        status=result["status"],
+        reason=result["reason"],
     )
 
 

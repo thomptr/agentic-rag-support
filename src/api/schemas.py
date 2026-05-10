@@ -31,6 +31,24 @@ class QueryMetadata(BaseModel):
     retrieval_confidence: float | None = None
 
 
+class ToolCallResult(BaseModel):
+    tool_name: str
+    status: str
+    result: dict | None = None
+    error: str | None = None
+    block_reason: str | None = None
+    approval_id: str | None = None
+
+
+class ApprovalItem(BaseModel):
+    id: str
+    tool_name: str
+    parameters: dict
+    status: str
+    created_at: str
+    expires_at: str
+
+
 class QueryResponse(BaseModel):
     query_id: str
     response_text: str
@@ -38,6 +56,10 @@ class QueryResponse(BaseModel):
     routing_rationale: str | None
     citations: list[CitationResponse]
     metadata: QueryMetadata
+    # Tool execution metadata (003)
+    tool_calls: list[ToolCallResult] = []
+    action_taken: bool = False
+    pending_approvals: list[ApprovalItem] = []
 
 
 class HealthResponse(BaseModel):
@@ -45,3 +67,34 @@ class HealthResponse(BaseModel):
     database: str
     vector_store: str
     llm: str
+
+
+# Approval API schemas
+
+
+class ApprovalListResponse(BaseModel):
+    approvals: list[ApprovalItem]
+
+
+class ApproveRequest(BaseModel):
+    reviewer: str
+    reason: str
+
+
+class RejectRequest(BaseModel):
+    reviewer: str
+    reason: str
+
+
+class ApprovalResponse(BaseModel):
+    id: str
+    status: str
+    tool_name: str
+    result: dict | None = None
+    error: str | None = None
+
+
+class RejectResponse(BaseModel):
+    id: str
+    status: str
+    reason: str
