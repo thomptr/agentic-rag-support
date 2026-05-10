@@ -35,10 +35,19 @@ app = FastAPI(
 )
 
 
+_ALLOWED_MODELS = {"gpt-4o-mini", "gpt-4o", "claude-sonnet-4-6"}
+
+
 @app.post("/query", response_model=QueryResponse)
 async def query_endpoint(request: QueryRequest) -> QueryResponse:
     if not request.query_text.strip():
         raise HTTPException(status_code=422, detail="query_text must not be empty")
+
+    if request.model_override is not None and request.model_override not in _ALLOWED_MODELS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"model_override must be one of: {sorted(_ALLOWED_MODELS)}",
+        )
 
     query_id = str(uuid.uuid4())
     run_id = str(uuid.uuid4())
@@ -71,6 +80,9 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
         "pending_approvals": None,
         "action_taken": None,
         "action_needed": None,
+        # Per-request overrides (004: frontend)
+        "guardrails_enabled": request.guardrails_enabled,
+        "model_override": request.model_override,
     }
 
     start = time.perf_counter()
