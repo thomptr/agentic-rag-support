@@ -1,0 +1,4 @@
+langfuse>=2.0,<3.0
+aws-lambda-powertools>=3.0
+structlog>=24.0
+pydantic>=2.5

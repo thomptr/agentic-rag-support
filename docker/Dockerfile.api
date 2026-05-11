@@ -1,0 +1,34 @@
+# ── Build stage ───────────────────────────────────────────────────────────────
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+RUN pip install --no-cache-dir uv
+
+COPY pyproject.toml uv.lock ./
+RUN uv pip install --system --no-cache \
+    fastapi \
+    "uvicorn[standard]" \
+    pydantic-settings \
+    structlog \
+    psycopg[binary] \
+    boto3 \
+    botocore \
+    requests
+
+# ── Runtime stage (ARM64 / Graviton) ─────────────────────────────────────────
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+COPY src/ ./src/
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8000
+
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

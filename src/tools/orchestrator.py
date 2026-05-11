@@ -147,6 +147,47 @@ def execute_tool(
         )
 
     # --- Execute tool ---
+    # Gateway-kind tools dispatch exclusively through AgentCore Tool Gateway.
+    # The in-process fallback was removed per FR-014 once the live Gateway
+    # path was validated. Missing GATEWAY_URL is a configuration error, not
+    # a fallback signal.
+    if tool.kind == "gateway":
+        if not settings.gateway_url:
+            log_tool_failed(tool_name, parameters, "gateway_url_unset", session_id)
+            return ToolResult(
+                tool_name=tool_name,
+                status="failed",
+                result=None,
+                error="gateway_url is not configured; cannot dispatch gateway-kind tool",
+                block_reason=None,
+                approval_id=None,
+            )
+        import uuid as _uuid
+
+        from src.tools.gateway_executor import invoke as _gw_invoke
+
+        trace_meta = {
+            "trace_id": str(_uuid.uuid4()),
+            "parent_span_id": str(_uuid.uuid4()),
+            "session_id": session_id,
+            "run_id": session_id,
+        }
+        gw_result = _gw_invoke(
+            tool_name=tool_name,
+            parameters=parameters,
+            session_id=session_id,
+            agent_type=agent_type,
+            trace_meta=trace_meta,
+        )
+        return ToolResult(
+            tool_name=gw_result.tool_name,
+            status=gw_result.status,
+            result=gw_result.result,
+            error=gw_result.error,
+            block_reason=None,
+            approval_id=None,
+        )
+
     try:
         raw_result = tool.execute_fn(validated)
         duration_ms = (time.perf_counter() - start) * 1000

@@ -5,7 +5,7 @@ import uuid
 from fastapi.testclient import TestClient
 
 from src.api.main import app
-from src.tools.executor import execute_tool
+from src.tools.orchestrator import execute_tool
 
 client = TestClient(app)
 

@@ -1,17 +1,68 @@
-"""Integration tests for tool execution through the graph (T039, T055, T056-T062).
+"""Integration tests for tool execution through the orchestrator.
 
-These tests exercise the tool pipeline directly (without the full LangGraph graph)
-to avoid needing an LLM/DB connection. They test execute_tool() end-to-end.
+These exercise guardrails + approval + dispatch end-to-end. After the Gateway
+cutover (FR-014), the dispatch step routes through `gateway_executor.invoke`.
+We autouse-patch that boundary so the tests stay hermetic (no live Gateway).
 """
 
 import uuid
 
 import pytest
 
-from src.tools.executor import execute_tool
 from src.tools.guardrails import (
     _approval_store,
 )
+from src.tools.orchestrator import execute_tool
+
+
+@pytest.fixture(autouse=True)
+def _stub_gateway(monkeypatch):
+    """Make all kind='gateway' dispatches succeed with a synthetic result.
+
+    Returns shapes matching what the live Lambdas would emit so downstream
+    assertions about `result` fields (ticket_id, order_id, refund_id) still
+    have something realistic to read.
+    """
+    from src.tools import gateway_executor
+
+    monkeypatch.setattr("src.tools.orchestrator.settings.gateway_url", "https://test.gw")
+
+    _SYNTHETIC_RESULTS = {
+        # status="shipped" matches the value the legacy in-process mock returned,
+        # which several tests assert against.
+        "order_status_lookup": {
+            "order_id": "ORD-12346",
+            "status": "shipped",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-02T00:00:00Z",
+            "items": [{"sku": "X", "qty": 1}],
+            "total": 49.99,
+            "tracking_number": "TRK-12346",
+        },
+        "create_support_ticket": {
+            "ticket_id": "TKT-INTEG01",
+            "status": "open",
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+        "issue_refund": {
+            "refund_id": "REF-INTEG01",
+            "order_id": "ORD-12346",
+            "amount": 49.99,
+            "status": "processed",
+            "processed_at": "2026-01-01T00:00:00Z",
+        },
+    }
+
+    def _fake_invoke(*, tool_name, parameters, session_id, agent_type, trace_meta):
+        return gateway_executor.ToolResult(
+            tool_name=tool_name,
+            status="success",
+            result=_SYNTHETIC_RESULTS.get(tool_name, {"ok": True}),
+            error=None,
+        )
+
+    monkeypatch.setattr(gateway_executor, "invoke", _fake_invoke)
+    yield
 
 
 def _sid() -> str:

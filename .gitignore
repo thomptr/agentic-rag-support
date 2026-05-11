@@ -13,3 +13,13 @@ build/
 *.log
 .DS_Store
 
+# OpenTofu / Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+tfplan
+
+# Lambda build artifacts
+lambdas/_dist/
+

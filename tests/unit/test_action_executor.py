@@ -1,8 +1,33 @@
-"""Unit tests for action_executor node (T028, T051, T052 — must FAIL before implementation)."""
+"""Unit tests for action_executor node.
+
+After the Gateway cutover (FR-014), action_executor → execute_tool →
+gateway_executor.invoke is the path for action tools. We autouse-patch the
+Gateway boundary so these tests stay hermetic.
+"""
 
 import uuid
 
+import pytest
+
 from src.agents.action_executor import action_executor
+
+
+@pytest.fixture(autouse=True)
+def _stub_gateway(monkeypatch):
+    from src.tools import gateway_executor
+
+    monkeypatch.setattr("src.tools.orchestrator.settings.gateway_url", "https://test.gw")
+
+    def _fake_invoke(*, tool_name, parameters, session_id, agent_type, trace_meta):
+        return gateway_executor.ToolResult(
+            tool_name=tool_name,
+            status="success",
+            result={"ok": True, "tool": tool_name},
+            error=None,
+        )
+
+    monkeypatch.setattr(gateway_executor, "invoke", _fake_invoke)
+    yield
 
 
 def _state_with_tool_calls(tool_calls: list) -> dict:
