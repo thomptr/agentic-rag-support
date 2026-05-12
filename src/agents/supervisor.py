@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from src.config import settings
 from src.graph.state import SupportGraphState
+from src.observability import langfuse_init
 from src.observability.logger import log_routing_decision
 
 _VALID_DOMAINS = frozenset(("billing", "technical", "account"))
@@ -49,7 +50,18 @@ def supervisor(state: SupportGraphState) -> Command:
         prompt = _CLASSIFY_PROMPT.format(query=query_text)
 
         start = time.perf_counter()
-        classification = structured_llm.invoke(prompt)
+        with langfuse_init.generation(
+            name="supervisor.classify_domain",
+            model=settings.llm_model,
+            input_payload=prompt,
+        ) as gen:
+            classification = structured_llm.invoke(prompt)
+            gen.update(
+                output={
+                    "domains": classification.domains,
+                    "rationale": classification.rationale,
+                }
+            )
         _latency_ms = (time.perf_counter() - start) * 1000
 
         raw_domains = [d.lower().strip() for d in (classification.domains or [])]

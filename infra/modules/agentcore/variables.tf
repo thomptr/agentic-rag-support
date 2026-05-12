@@ -59,6 +59,11 @@ variable "langfuse_public_key_arn" {
   type = string
 }
 
+variable "langfuse_host" {
+  type    = string
+  default = "https://cloud.langfuse.com"
+}
+
 variable "log_level" {
   type    = string
   default = "INFO"

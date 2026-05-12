@@ -166,16 +166,17 @@ def execute_tool(
                 block_reason=None,
                 approval_id=None,
             )
-        import uuid as _uuid
-
+        from src.observability import langfuse_init
         from src.tools.gateway_executor import invoke as _gw_invoke
 
-        trace_meta = {
-            "trace_id": str(_uuid.uuid4()),
-            "parent_span_id": str(_uuid.uuid4()),
-            "session_id": session_id,
-            "run_id": session_id,
-        }
+        # Pull trace_id + parent_span_id from the currently-active Langfuse
+        # trace so the Lambda's child spans land under the same parent as
+        # everything else this invocation emitted. Falls back to synthesized
+        # UUIDs if no trace is active (e.g. local dev without Langfuse creds).
+        trace_meta = langfuse_init.current_trace_meta(
+            session_id=session_id,
+            run_id=session_id,
+        )
         gw_result = _gw_invoke(
             tool_name=tool_name,
             parameters=parameters,

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from src.config import settings
 from src.graph.state import SupportGraphState
+from src.observability import langfuse_init
 from src.tools.registry import get_tool_descriptions
 
 _SYSTEM_PROMPT = """You are a customer support tool planner. Given the customer's query, the response already generated, and the available tools, decide if any tool actions should be taken.
@@ -70,12 +71,27 @@ Based on the customer's query, determine if any tool actions should be taken. If
     structured_llm = llm.with_structured_output(ToolCallPlan)
 
     try:
-        plan: ToolCallPlan = structured_llm.invoke(
-            [
-                SystemMessage(content=_SYSTEM_PROMPT),
-                HumanMessage(content=prompt),
-            ]
-        )
+        with langfuse_init.generation(
+            name="action_planner.plan",
+            model=settings.llm_model,
+            input_payload=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "human", "content": prompt},
+            ],
+            metadata={"available_tools": [t["name"] for t in tool_descriptions]},
+        ) as gen:
+            plan: ToolCallPlan = structured_llm.invoke(
+                [
+                    SystemMessage(content=_SYSTEM_PROMPT),
+                    HumanMessage(content=prompt),
+                ]
+            )
+            gen.update(
+                output={
+                    "action_needed": plan.action_needed,
+                    "tool_calls": [tc.tool_name for tc in (plan.tool_calls or [])],
+                }
+            )
     except Exception:
         return {
             "tool_calls": [],

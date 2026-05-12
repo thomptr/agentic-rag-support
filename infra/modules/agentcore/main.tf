@@ -123,6 +123,11 @@ resource "awscc_bedrockagentcore_runtime" "main" {
     COGNITO_CLIENT_ID         = var.cognito_client_id
     COGNITO_CLIENT_SECRET_ARN = var.cognito_client_secret_arn
     COGNITO_SCOPE             = var.cognito_scope
+    # Langfuse: ARNs are passed verbatim; the entrypoint resolves the JSON
+    # secret payload at cold start (the same pattern as OPENAI_API_KEY_ARN).
+    LANGFUSE_HOST       = var.langfuse_host
+    LANGFUSE_SECRET_REF = var.langfuse_secret_key_arn
+    LANGFUSE_PUBLIC_REF = var.langfuse_public_key_arn
   }
 
   # protocol_configuration is a plain string in the AWSCC schema, not a nested block.

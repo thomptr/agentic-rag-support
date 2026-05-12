@@ -7,6 +7,7 @@ from langchain_openai import ChatOpenAI
 
 from src.config import settings
 from src.graph.state import SupportGraphState
+from src.observability import langfuse_init
 from src.observability.logger import log_agent_response, log_knowledge_gap, log_llm_call
 
 _SYSTEM_PROMPT = """You are a customer support specialist. Your answers must be grounded in the retrieved documents provided.
@@ -60,13 +61,22 @@ def response_generator(state: SupportGraphState) -> dict:
         # Knowledge gap: no usable results
         start = time.perf_counter()
         try:
-            response = llm.invoke(
-                [
-                    SystemMessage(content=_SYSTEM_PROMPT),
-                    HMsg(content=_GAP_PROMPT.format(question=query_text)),
-                ]
-            )
-            response_text = response.content
+            with langfuse_init.generation(
+                name="response_generator.knowledge_gap",
+                model=settings.llm_model,
+                input_payload=[
+                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "human", "content": _GAP_PROMPT.format(question=query_text)},
+                ],
+            ) as gen:
+                response = llm.invoke(
+                    [
+                        SystemMessage(content=_SYSTEM_PROMPT),
+                        HMsg(content=_GAP_PROMPT.format(question=query_text)),
+                    ]
+                )
+                response_text = response.content
+                gen.update(output=response_text[:1000])
         except Exception:
             response_text = (
                 "I don't have enough information in my knowledge base to fully answer your question. "
@@ -123,8 +133,14 @@ def response_generator(state: SupportGraphState) -> dict:
 
     start = time.perf_counter()
     try:
-        response = llm.invoke(messages)
-        response_text = response.content
+        with langfuse_init.generation(
+            name="response_generator.llm",
+            model=settings.llm_model,
+            input_payload=[{"role": m.type, "content": m.content} for m in messages],
+        ) as gen:
+            response = llm.invoke(messages)
+            response_text = response.content
+            gen.update(output=response_text[:1000])
     except Exception:
         response_text = (
             "I apologize — I encountered an error while processing your request. "

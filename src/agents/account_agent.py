@@ -19,6 +19,7 @@ from langchain_openai import ChatOpenAI
 from src.agents.profiles import AGENT_PROFILES
 from src.config import settings
 from src.graph.state import SupportGraphState
+from src.observability import langfuse_init
 from src.observability.logger import log_agent_response, log_llm_call
 from src.tools.registry import get_tools_for_agent, llm_tool_calls_to_planned
 
@@ -105,9 +106,24 @@ def account_agent(state: SupportGraphState) -> dict:
     start = time.perf_counter()
     planned_tool_calls: list[dict] = []
     try:
-        response = llm.invoke(messages)
-        response_text = response.content or ""
-        planned_tool_calls = llm_tool_calls_to_planned(getattr(response, "tool_calls", None))
+        with langfuse_init.generation(
+            name="account_agent.llm",
+            model=settings.llm_model,
+            input_payload=[{"role": m.type, "content": m.content} for m in messages],
+            metadata={"tool_count": len(tools), "takeover_detected": is_takeover},
+        ) as gen:
+            response = llm.invoke(messages)
+            response_text = response.content or ""
+            planned_tool_calls = llm_tool_calls_to_planned(getattr(response, "tool_calls", None))
+            gen.update(
+                output={
+                    "response_text": response_text[:1000],
+                    "tool_calls": [
+                        tc.get("name") for tc in (getattr(response, "tool_calls", []) or [])
+                    ],
+                },
+                usage_details=getattr(response, "usage_metadata", None),
+            )
     except Exception:
         response_text = (
             "I apologize — I encountered an error while processing your account inquiry. "
