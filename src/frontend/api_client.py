@@ -1,8 +1,12 @@
 """HTTP client wrapping the FastAPI backend for the Streamlit frontend."""
 
+import os
+
 import httpx
 
-BACKEND_URL = "http://localhost:8000"
+# In ECS the task def sets API_URL to the ALB's HTTP endpoint; local dev
+# defaults to a uvicorn on 8000.
+BACKEND_URL = os.environ.get("API_URL", "http://localhost:8000")
 REQUEST_TIMEOUT = 30
 
 _client = httpx.Client(base_url=BACKEND_URL, timeout=REQUEST_TIMEOUT)

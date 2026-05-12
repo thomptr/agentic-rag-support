@@ -20,6 +20,7 @@ from bedrock_agentcore.runtime import BedrockAgentCoreApp
 import src.observability.logger  # noqa: F401 — registers structlog + Langfuse processors
 from src.config import settings
 from src.graph.workflow import graph
+from src.observability import langfuse_init
 
 # In VPC mode, outbound internet traffic (Langfuse cloud, OpenAI)
 # routes through the NAT Gateway — no additional proxy config is required.
@@ -136,7 +137,28 @@ def agent_invocation(payload: dict, context) -> dict:
         "model_override": payload.get("model_override"),
     }
 
-    result = graph.invoke(initial_state)
+    # Open the parent Langfuse trace for this invocation. The graph nodes,
+    # LLM calls, and tool dispatches use `langfuse_init.span(...)` /
+    # `current_trace_meta(...)` to attach child observations to this trace.
+    # Flush happens automatically on context exit so spans land before the
+    # AgentCore Runtime freezes the worker.
+    with langfuse_init.trace(
+        name="agent.invoke",
+        input_payload={"query": payload["prompt"], "session_id": session_id},
+        metadata={
+            "deployment_mode": settings.deployment_mode,
+            "model_override": payload.get("model_override"),
+            "guardrails_enabled": payload.get("guardrails_enabled", True),
+        },
+        session_id=session_id,
+    ) as parent_trace:
+        result = graph.invoke(initial_state)
+        # Use Langfuse's actual trace ID so the API response correlates with
+        # what shows up in the Langfuse UI.
+        if parent_trace is not None:
+            langfuse_trace_id = parent_trace.id
+            parent_trace.update(output={"response_text": result.get("response_text") or ""})
+
     response_text = result.get("response_text") or ""
 
     # Persist this exchange to AgentCore Memory

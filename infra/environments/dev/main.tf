@@ -67,6 +67,7 @@ module "lambdas" {
   lambda_zip_dir          = "${path.root}/../../../lambdas/_dist"
   langfuse_secret_key_arn = module.secrets.langfuse_secret_key_arn
   langfuse_public_key_arn = module.secrets.langfuse_public_key_arn
+  langfuse_host           = var.langfuse_host
   secrets_kms_key_arn     = module.secrets.kms_key_arn
 }
 
@@ -114,6 +115,7 @@ module "agentcore" {
   openai_api_key_arn     = module.secrets.openai_api_key_arn
   langfuse_secret_key_arn = module.secrets.langfuse_secret_key_arn
   langfuse_public_key_arn = module.secrets.langfuse_public_key_arn
+  langfuse_host           = var.langfuse_host
 
   gateway_url               = module.agentcore_gateway.gateway_url
   cognito_token_url         = module.cognito.token_url
@@ -146,6 +148,7 @@ module "ecs" {
   openai_api_key_arn     = module.secrets.openai_api_key_arn
   langfuse_secret_key_arn = module.secrets.langfuse_secret_key_arn
   langfuse_public_key_arn = module.secrets.langfuse_public_key_arn
+  langfuse_host           = var.langfuse_host
 
   depends_on = [module.agentcore, module.networking, module.secrets, module.database]
 }

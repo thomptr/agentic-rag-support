@@ -28,3 +28,9 @@ variable "db_username" {
   type    = string
   default = "agentic_rag_admin"
 }
+
+variable "langfuse_host" {
+  type        = string
+  description = "Langfuse cloud host. Set to https://us.cloud.langfuse.com for US-region projects, https://cloud.langfuse.com for EU."
+  default     = "https://us.cloud.langfuse.com"
+}

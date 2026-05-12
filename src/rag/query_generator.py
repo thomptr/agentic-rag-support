@@ -2,6 +2,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 from src.config import settings
+from src.observability import langfuse_init
 
 
 class _SearchQuery(BaseModel):
@@ -84,7 +85,19 @@ def generate_search_queries(
             question=query_text,
         )
 
-        result = structured_llm.invoke(prompt)
+        with langfuse_init.generation(
+            name="query_generator.expand",
+            model=settings.llm_model,
+            input_payload=prompt,
+            metadata={"domains": classified_domains},
+        ) as gen:
+            result = structured_llm.invoke(prompt)
+            gen.update(
+                output={
+                    "queries": [q.query for q in result.queries],
+                    "domains": [q.target_domain for q in result.queries],
+                }
+            )
         return [
             {
                 "query": q.query,

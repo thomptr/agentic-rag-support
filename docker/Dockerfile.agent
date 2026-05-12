@@ -14,7 +14,8 @@ RUN uv pip install --system --no-cache \
     langchain-postgres \
     psycopg[binary] \
     pydantic-settings \
-    structlog
+    structlog \
+    "langfuse>=2.0,<3.0"
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM python:3.11-slim
