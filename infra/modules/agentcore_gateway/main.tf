@@ -59,9 +59,13 @@ resource "awscc_bedrockagentcore_gateway" "tools" {
 
   authorizer_configuration = {
     custom_jwt_authorizer = {
-      discovery_url     = var.cognito_discovery_url
-      allowed_audience  = [var.cognito_scope]
-      allowed_clients   = [var.cognito_client_id]
+      discovery_url   = var.cognito_discovery_url
+      allowed_clients = [var.cognito_client_id]
+      # NOTE: do not set `allowed_audience`. Cognito access tokens from the
+      # client_credentials flow have no `aud` claim — only `client_id`,
+      # `scope`, `sub`. AgentCore Gateway evaluates allowed_audience AND
+      # allowed_clients conjunctively, so any `allowed_audience` value here
+      # fails the missing-aud check and surfaces as 403 insufficient_scope.
     }
   }
 

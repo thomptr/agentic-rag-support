@@ -9,7 +9,7 @@ def sample_billing_state():
         "messages": [],
         "classified_domain": "billing",
         "confidence_rationale": "Mentions charges",
-        "routed_to_agent": "billing_agent",
+        "current_node": "billing_agent",
         "retrieved_documents": None,
         "response_text": None,
         "citations": None,

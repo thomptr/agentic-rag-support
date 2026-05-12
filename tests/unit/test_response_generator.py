@@ -26,7 +26,7 @@ def _make_state(merged_results=_DEFAULT_MERGED_RESULTS, retrieval_confidence=Non
         "classified_domain": None,
         "classified_domains": ["billing", "account"],
         "confidence_rationale": None,
-        "routed_to_agent": None,
+        "current_node": None,
         "retrieved_documents": None,
         "response_text": None,
         "citations": None,

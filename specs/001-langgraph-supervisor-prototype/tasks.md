@@ -49,7 +49,7 @@
 ### Implementation for Foundational Phase
 
 - [X] T013 Create application config in `src/config.py` using pydantic-settings `BaseSettings` — load ANTHROPIC_API_KEY, OPENAI_API_KEY, DATABASE_URL, LLM_MODEL, EMBEDDING_MODEL, LOG_LEVEL from environment / `.env`
-- [X] T014 Implement `SupportGraphState` TypedDict in `src/graph/state.py` — define all fields: query_id, query_text, messages (with `add_messages` reducer), classified_domain, confidence_rationale, routed_to_agent, retrieved_documents, response_text, citations, run_id, log_events (with accumulator reducer). Ensure T009 tests pass
+- [X] T014 Implement `SupportGraphState` TypedDict in `src/graph/state.py` — define all fields: query_id, query_text, messages (with `add_messages` reducer), classified_domain, confidence_rationale, current_node, retrieved_documents, response_text, citations, run_id, log_events (with accumulator reducer). Ensure T009 tests pass
 - [X] T015 [P] Implement observability helpers in `src/observability/logger.py` — configure `structlog` for JSON output, implement `log_llm_call()`, `log_retrieval()`, `log_routing_decision()`, `log_agent_response()` that both emit structlog lines and return event dicts for state accumulation. Ensure T010 tests pass
 - [X] T016 [P] Implement text chunking in `src/rag/chunking.py` — create function using `RecursiveCharacterTextSplitter` with chunk_size=1000, chunk_overlap=200. Ensure T011 tests pass
 - [X] T017 [P] Implement routing logic in `src/graph/routing.py` — create `route_query(state: SupportGraphState) -> str` that maps classified_domain to node names, with "unknown"→"fallback_handler". Ensure T012 tests pass
@@ -93,7 +93,7 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [X] T024 [P] [US1] Write unit tests for supervisor classification in `tests/unit/test_supervisor.py` — mock `ChatAnthropic` to return structured classification {"domain": "billing", "rationale": "..."}. Verify supervisor writes `classified_domain`, `confidence_rationale`, `routed_to_agent` to state. Verify routing decision log event is emitted. Verify supervisor handles LLM errors gracefully (FR edge case)
+- [X] T024 [P] [US1] Write unit tests for supervisor classification in `tests/unit/test_supervisor.py` — mock `ChatAnthropic` to return structured classification {"domain": "billing", "rationale": "..."}. Verify supervisor writes `classified_domain`, `confidence_rationale`, `current_node` to state. Verify routing decision log event is emitted. Verify supervisor handles LLM errors gracefully (FR edge case)
 - [X] T025 [P] [US1] Write unit tests for billing agent in `tests/unit/test_billing_agent.py` — mock retriever to return fixed billing documents, mock LLM to return a response. Test all 5 responsibilities from `design/Billing Agent.md`:
   - Retrieve pricing docs/invoice policies/cancellation terms: verify retriever called with domain="billing", verify retrieved docs passed to LLM context
   - Check subscription status: verify agent handles subscription-related queries by retrieving refund-eligibility.md content

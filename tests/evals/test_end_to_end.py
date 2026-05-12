@@ -18,7 +18,7 @@ def _invoke_graph(query_text: str) -> dict:
         "messages": [],
         "classified_domain": None,
         "confidence_rationale": None,
-        "routed_to_agent": None,
+        "current_node": None,
         "retrieved_documents": None,
         "response_text": None,
         "citations": None,

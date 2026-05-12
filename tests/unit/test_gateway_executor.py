@@ -33,12 +33,29 @@ def _trace_meta() -> dict:
     }
 
 
-def _success_response(trace_id: str) -> dict:
-    return {
+def _success_rpc(trace_id: str) -> dict:
+    """Mimic the Gateway's MCP envelope around a successful Lambda response."""
+    lambda_envelope = {
         "status": "success",
         "result": {"ticket_id": "TKT-1"},
         "trace_id": trace_id,
     }
+    import json as _json
+
+    return {
+        "jsonrpc": "2.0",
+        "id": "1",
+        "result": {
+            "isError": False,
+            "content": [{"type": "text", "text": _json.dumps(lambda_envelope)}],
+        },
+    }
+
+
+# Internal tool name the executor knows how to route. Tests use this so the
+# `_AGENT_TO_MCP_TOOL` mapping is exercised (mapping is the production
+# invariant — if it ever drifts, these tests catch it).
+_AGENT_TOOL = "create_support_ticket"
 
 
 class TestGatewayExecutor:
@@ -47,10 +64,10 @@ class TestGatewayExecutor:
     def test_jwt_cache_miss_triggers_fetch(self, mock_mcp, mock_cache):
         meta = _trace_meta()
         mock_cache.get.return_value = "jwt-fresh"
-        mock_mcp.return_value = _success_response(meta["trace_id"])
+        mock_mcp.return_value = _success_rpc(meta["trace_id"])
 
         result = invoke(
-            "create_ticket", {"subject": "s", "description": "d"}, "session-1", "billing", meta
+            _AGENT_TOOL, {"subject": "s", "description": "d"}, "session-1", "billing", meta
         )
 
         assert isinstance(result, ToolResult)
@@ -62,11 +79,11 @@ class TestGatewayExecutor:
     def test_jwt_cache_hit_reuses_token(self, mock_mcp, mock_cache):
         meta = _trace_meta()
         mock_cache.get.return_value = "jwt-fresh"
-        mock_mcp.return_value = _success_response(meta["trace_id"])
+        mock_mcp.return_value = _success_rpc(meta["trace_id"])
 
-        invoke("create_ticket", {}, "s", "a", meta)
-        invoke("create_ticket", {}, "s", "a", meta)
-        invoke("create_ticket", {}, "s", "a", meta)
+        invoke(_AGENT_TOOL, {}, "s", "a", meta)
+        invoke(_AGENT_TOOL, {}, "s", "a", meta)
+        invoke(_AGENT_TOOL, {}, "s", "a", meta)
 
         assert mock_cache.get.call_count == 3
         # Cache.get is the abstraction; it internally decides FRESH vs refresh.
@@ -80,10 +97,10 @@ class TestGatewayExecutor:
         mock_cache.get.side_effect = ["expired-jwt", "fresh-jwt"]
         mock_mcp.side_effect = [
             GatewayHTTPError(status_code=401, message="Unauthorized"),
-            _success_response(meta["trace_id"]),
+            _success_rpc(meta["trace_id"]),
         ]
 
-        result = invoke("create_ticket", {}, "s", "a", meta)
+        result = invoke(_AGENT_TOOL, {}, "s", "a", meta)
 
         assert result.status == "success"
         mock_cache.invalidate.assert_called_once()
@@ -96,23 +113,40 @@ class TestGatewayExecutor:
         mock_cache.get.return_value = "fresh-jwt"
         mock_mcp.side_effect = GatewayHTTPError(status_code=504, message="Gateway Timeout")
 
-        result = invoke("create_ticket", {}, "s", "a", meta)
+        result = invoke(_AGENT_TOOL, {}, "s", "a", meta)
 
         assert result.status == "failed"
         assert mock_mcp.call_count == 1
 
     @patch("src.tools.gateway_executor._jwt_cache")
     @patch("src.tools.gateway_executor._mcp_call")
-    def test_trace_meta_propagated_in_every_request(self, mock_mcp, mock_cache):
+    def test_trace_meta_propagated_inside_arguments(self, mock_mcp, mock_cache):
         meta = _trace_meta()
         mock_cache.get.return_value = "jwt"
-        mock_mcp.return_value = _success_response(meta["trace_id"])
+        mock_mcp.return_value = _success_rpc(meta["trace_id"])
 
-        invoke("create_ticket", {"subject": "s", "description": "d"}, "session-1", "billing", meta)
+        invoke(_AGENT_TOOL, {"subject": "s", "description": "d"}, "session-1", "billing", meta)
 
-        # The MCP call argument should be the full payload including trace_meta.
+        # The Gateway passes arguments through verbatim as the Lambda event,
+        # so arguments MUST be the wrapped envelope the Lambda expects.
         _, kwargs = mock_mcp.call_args
-        payload = kwargs.get("payload") or mock_mcp.call_args.args[-1]
-        assert isinstance(payload, dict)
-        assert payload["trace_meta"]["trace_id"] == meta["trace_id"]
-        assert payload["trace_meta"]["parent_span_id"] == meta["parent_span_id"]
+        payload = kwargs["payload"]
+        assert payload["jsonrpc"] == "2.0"
+        assert payload["method"] == "tools/call"
+        assert payload["params"]["name"] == "create-ticket___create_ticket"
+        args = payload["params"]["arguments"]
+        # Wrapped envelope: tool_name + parameters + trace_meta at top of args.
+        assert args["tool_name"] == "create_ticket"  # Lambda's internal name
+        assert args["parameters"]["subject"] == "s"
+        assert args["trace_meta"]["trace_id"] == meta["trace_id"]
+        assert args["trace_meta"]["parent_span_id"] == meta["parent_span_id"]
+
+    @patch("src.tools.gateway_executor._jwt_cache")
+    @patch("src.tools.gateway_executor._mcp_call")
+    def test_unknown_internal_tool_fails_fast(self, mock_mcp, mock_cache):
+        """If an agent emits a tool not in _AGENT_TO_MCP_TOOL, the executor
+        must not even attempt the Gateway call."""
+        result = invoke("definitely_not_a_real_tool", {}, "s", "a", _trace_meta())
+        assert result.status == "failed"
+        assert "unknown_gateway_tool" in (result.error or "")
+        mock_mcp.assert_not_called()

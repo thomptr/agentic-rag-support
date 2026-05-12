@@ -81,7 +81,7 @@ def supervisor(state: SupportGraphState) -> Command:
             "classified_domain": primary_domain,
             "classified_domains": domains,
             "confidence_rationale": rationale,
-            "routed_to_agent": goto,
+            "current_node": goto,
             "log_events": [routing_event],
         },
     )

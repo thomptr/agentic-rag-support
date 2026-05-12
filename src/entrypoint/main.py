@@ -114,7 +114,7 @@ def agent_invocation(payload: dict, context) -> dict:
         "classified_domain": None,
         "classified_domains": None,
         "confidence_rationale": None,
-        "routed_to_agent": None,
+        "current_node": None,
         "retrieved_documents": None,
         "response_text": None,
         "citations": None,
@@ -150,7 +150,7 @@ def agent_invocation(payload: dict, context) -> dict:
     retrieval_confidence_obj = result.get("retrieval_confidence") or {}
     return {
         "result": response_text,
-        "agent": result.get("routed_to_agent"),
+        "agent": result.get("current_node"),
         "citations": result.get("citations") or [],
         "session_id": session_id,
         "langfuse_trace_id": langfuse_trace_id,

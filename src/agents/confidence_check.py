@@ -1,5 +1,6 @@
 from langgraph.types import Command
 
+from src.agents.profiles import domain_to_agent
 from src.graph.state import SupportGraphState
 from src.observability.logger import log_confidence_assessment, log_retrieval_retry
 from src.rag.confidence import assess_confidence
@@ -44,8 +45,13 @@ def confidence_check(state: SupportGraphState) -> Command:
             },
         )
 
+    # Dispatch to the domain-specific agent matching the supervisor's
+    # classification. `response_generator` is the fallback for unknown domains.
+    domains = state.get("classified_domains") or []
+    primary_domain = domains[0] if domains else "unknown"
+    target = domain_to_agent(primary_domain)
     return Command(
-        goto="response_generator",
+        goto=target,
         update={
             "retrieval_confidence": assessment,
             "log_events": log_events,

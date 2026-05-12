@@ -65,6 +65,36 @@ def to_mcp_schema(model_cls) -> dict:
     return out
 
 
+def envelope_schema(model_cls) -> dict:
+    """Wrap the per-tool input schema in the contract envelope the Lambdas
+    actually expect: `{tool_name, parameters, trace_meta}`. The Gateway passes
+    the MCP `arguments` straight through as the Lambda event, so the schema
+    we register here MUST match the Lambda's `event[...]` reads — not the raw
+    parameter object. (See contracts/tool-lambda.md.)"""
+    return {
+        "type": "object",
+        "properties": {
+            "tool_name": {
+                "type": "string",
+                "description": "Lambda's internal TOOL_NAME constant.",
+            },
+            "parameters": to_mcp_schema(model_cls),
+            "trace_meta": {
+                "type": "object",
+                "description": "Langfuse trace continuity metadata.",
+                "properties": {
+                    "trace_id": {"type": "string"},
+                    "parent_span_id": {"type": "string"},
+                    "session_id": {"type": "string"},
+                    "run_id": {"type": "string"},
+                },
+                "required": ["trace_id", "parent_span_id"],
+            },
+        },
+        "required": ["tool_name", "parameters", "trace_meta"],
+    }
+
+
 def _strip_schema(prop: dict) -> dict:
     """Project a Pydantic JSON Schema property to AgentCore-acceptable shape.
 
@@ -131,7 +161,7 @@ for t in TARGETS:
     tool_payload = {
         "name": t["tool_name"],
         "description": t["description"],
-        "inputSchema": to_mcp_schema(t["input_model"]),
+        "inputSchema": envelope_schema(t["input_model"]),
         "outputSchema": to_mcp_schema(t["output_model"]),
     }
     target_config = {

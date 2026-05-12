@@ -26,7 +26,7 @@ The supervisor agent's classification output.
 | query_id | UUID | FK to CustomerQuery | Links to the originating query |
 | classified_domain | enum | "billing" / "technical" / "account" / "unknown" | LLM classification result |
 | confidence_rationale | str | Required | LLM's reasoning for classification |
-| routed_to_agent | str | Required | Node name the query was routed to |
+| current_node | str | Required | Node name the query was routed to |
 | created_at | datetime | Auto-set | Timestamp of routing decision |
 
 **State transitions**: `unknown` triggers the fallback handler instead of a worker agent.
@@ -120,7 +120,7 @@ class SupportGraphState(TypedDict):
     # Routing
     classified_domain: Literal["billing", "technical", "account", "unknown"] | None
     confidence_rationale: str | None
-    routed_to_agent: str | None
+    current_node: str | None
 
     # Retrieval
     retrieved_documents: list[dict] | None  # [{content, metadata, score}]

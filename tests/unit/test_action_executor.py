@@ -38,7 +38,7 @@ def _state_with_tool_calls(tool_calls: list) -> dict:
         "response_text": "Here is the information you requested.",
         "merged_results": [],
         "classified_domains": ["billing"],
-        "routed_to_agent": "support",
+        "current_node": "account_agent",
         "log_events": [],
         "tool_calls": tool_calls,
         "tool_results": None,

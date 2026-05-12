@@ -58,7 +58,7 @@ class TestExecuteTool:
             tool_name="order_status_lookup",
             parameters={"order_id": "ORD-12345"},
             session_id=session_id,
-            agent_type="support",
+            agent_type="account_agent",
         )
         assert result.status == "success"
         assert result.result is not None
@@ -70,7 +70,7 @@ class TestExecuteTool:
             tool_name="nonexistent_tool",
             parameters={},
             session_id=session_id,
-            agent_type="support",
+            agent_type="account_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "unknown_tool"
@@ -81,7 +81,7 @@ class TestExecuteTool:
             tool_name="order_status_lookup",
             parameters={},
             session_id=session_id,
-            agent_type="support",
+            agent_type="account_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "invalid_params"
@@ -92,7 +92,7 @@ class TestExecuteTool:
             tool_name="order_status_lookup",
             parameters={"order_id": "ORD-12345"},
             session_id=session_id,
-            agent_type="billing",
+            agent_type="billing_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "unknown_tool"
@@ -103,7 +103,7 @@ class TestExecuteTool:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12345", "amount": 999.0, "reason": "test"},
             session_id=session_id,
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "dollar_cap"
@@ -114,7 +114,7 @@ class TestExecuteTool:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12345", "amount": 50.0, "reason": "defective"},
             session_id=session_id,
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "pending_approval"
         assert result.approval_id is not None
@@ -137,7 +137,7 @@ class TestExecuteTool:
                 tool_name="order_status_lookup",
                 parameters={"order_id": "ORD-12345"},
                 session_id=session_id,
-                agent_type="support",
+                agent_type="account_agent",
             )
         assert result.status == "failed"
         assert result.error is not None

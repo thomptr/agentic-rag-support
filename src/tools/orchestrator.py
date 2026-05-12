@@ -27,7 +27,7 @@ from src.tools.guardrails import (
     check_refund_eligibility,
     check_requires_approval,
     check_risk_level,
-    validate_agent_allowlist,
+    validate_agent_can_use_tool,
     validate_customer_id,
     validate_params,
 )
@@ -70,9 +70,13 @@ def execute_tool(
 
     start = time.perf_counter()
 
-    # --- Guard 1: agent allowlist ---
+    # --- Guard 1: profile-based deny-by-default tool + risk gate ---
+    # `agent_type` is the agent profile name passed by the LangGraph node
+    # (e.g. "billing_agent"). The profile's tool_allowlist + max_risk_level
+    # decide whether this tool call is permitted. Empty allowlist (e.g. the
+    # generic response_generator fallback) blocks every tool.
     try:
-        validate_agent_allowlist(agent_type, tool_name, tool.allowed_agents)
+        validate_agent_can_use_tool(agent_type, tool_name, tool.risk_level)
     except UnknownToolError as exc:
         log_tool_blocked(tool_name, parameters, "unknown_tool", session_id)
         return ToolResult(tool_name, "blocked", None, str(exc), "unknown_tool", None)

@@ -42,9 +42,16 @@ def _get_llm() -> ChatOpenAI:
 
 def action_planner(state: SupportGraphState) -> dict:
     """Decide which tools (if any) to call based on the customer query and retrieved context."""
+    # Domain agents now bind tools via OpenAI function-calling and may have
+    # already produced structured tool_calls. If so, honor them and skip the
+    # secondary planning LLM call — re-prompting would second-guess the model.
+    existing = state.get("tool_calls")
+    if existing:
+        return {"tool_calls": existing, "log_events": []}
+
     query_text = state["query_text"]
     response_text = state.get("response_text") or ""
-    agent_type = state.get("routed_to_agent") or "support"
+    agent_type = state.get("current_node") or "support"
 
     tool_descriptions = get_tool_descriptions(agent_type=agent_type)
     tools_json = json.dumps(tool_descriptions, indent=2)

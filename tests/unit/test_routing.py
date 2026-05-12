@@ -9,7 +9,7 @@ def _make_state_with_domains(domains=None, confidence=None, retrieval_attempt=1)
         "classified_domain": (domains or ["unknown"])[0] if domains else "unknown",
         "classified_domains": domains,
         "confidence_rationale": "test",
-        "routed_to_agent": None,
+        "current_node": None,
         "retrieved_documents": None,
         "response_text": None,
         "citations": None,
@@ -60,11 +60,16 @@ class TestRouteConfidenceCheck:
         state = _make_state_with_domains(["billing"], confidence=confidence)
         assert route_confidence_check(state) == "retrieval_planner"
 
-    def test_sufficient_confidence_routes_to_response_generator(self):
+    def test_sufficient_confidence_routes_to_domain_agent(self):
+        """billing domain → billing_agent (was response_generator pre-refactor)."""
         confidence = {"should_retry": False, "score": 0.85, "reason": "sufficient"}
         state = _make_state_with_domains(["billing"], confidence=confidence)
-        assert route_confidence_check(state) == "response_generator"
+        assert route_confidence_check(state) == "billing_agent"
 
-    def test_no_confidence_defaults_to_response_generator(self):
-        state = _make_state_with_domains(["billing"], confidence=None)
+    def test_no_confidence_defaults_to_domain_agent(self):
+        state = _make_state_with_domains(["technical"], confidence=None)
+        assert route_confidence_check(state) == "technical_agent"
+
+    def test_unknown_domain_falls_back_to_generic_response_generator(self):
+        state = _make_state_with_domains([], confidence=None)
         assert route_confidence_check(state) == "response_generator"

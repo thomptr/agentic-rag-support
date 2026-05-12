@@ -99,7 +99,7 @@ def response_generator(state: SupportGraphState) -> dict:
         return {
             "response_text": response_text,
             "citations": [],
-            "routed_to_agent": "response_generator",
+            "current_node": "response_generator",
             "action_needed": action_needed,
             "log_events": [gap_event, llm_event],
         }
@@ -170,7 +170,7 @@ def response_generator(state: SupportGraphState) -> dict:
     return {
         "response_text": response_text,
         "citations": citations,
-        "routed_to_agent": "response_generator",
+        "current_node": "response_generator",
         "action_needed": action_needed,
         "log_events": [llm_event, response_event],
     }

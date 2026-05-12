@@ -80,7 +80,7 @@ class TestUS1AutonomousExecution:
             tool_name="order_status_lookup",
             parameters={"order_id": "ORD-12345"},
             session_id=_sid(),
-            agent_type="support",
+            agent_type="account_agent",
         )
         assert result.status == "success"
         assert result.result["status"] == "shipped"
@@ -96,7 +96,7 @@ class TestUS1AutonomousExecution:
                 "category": "billing",
             },
             session_id=_sid(),
-            agent_type="support",
+            agent_type="account_agent",
         )
         assert result.status == "success"
         assert result.result["ticket_id"].startswith("TKT-")
@@ -116,7 +116,7 @@ class TestUS3MultiToolSequencing:
             tool_name="order_status_lookup",
             parameters={"order_id": "ORD-12345"},
             session_id=session_id,
-            agent_type="support",
+            agent_type="account_agent",
         )
         assert order_result.status == "success"
         order_status = order_result.result["status"]
@@ -128,14 +128,16 @@ class TestUS3MultiToolSequencing:
                 "description": "Customer reported issue. Order status from lookup: " + order_status,
             },
             session_id=session_id,
-            agent_type="support",
+            agent_type="account_agent",
         )
         assert ticket_result.status == "success"
         assert ticket_result.result["ticket_id"].startswith("TKT-")
 
     def test_both_results_have_correct_structure(self):
         session_id = _sid()
-        r1 = execute_tool("order_status_lookup", {"order_id": "ORD-12346"}, session_id, "support")
+        r1 = execute_tool(
+            "order_status_lookup", {"order_id": "ORD-12346"}, session_id, "account_agent"
+        )
         r2 = execute_tool(
             "create_support_ticket",
             {
@@ -143,7 +145,7 @@ class TestUS3MultiToolSequencing:
                 "description": f"Order delivered: {r1.result}",
             },
             session_id,
-            "support",
+            "account_agent",
         )
         assert r1.status == "success"
         assert r2.status == "success"
@@ -179,14 +181,18 @@ class TestT056RateLimit:
         tool.rate_limit = 2
 
         try:
-            execute_tool("order_status_lookup", {"order_id": "ORD-12345"}, session_id, "support")
-            execute_tool("order_status_lookup", {"order_id": "ORD-12345"}, session_id, "support")
+            execute_tool(
+                "order_status_lookup", {"order_id": "ORD-12345"}, session_id, "account_agent"
+            )
+            execute_tool(
+                "order_status_lookup", {"order_id": "ORD-12345"}, session_id, "account_agent"
+            )
         except Exception:
             pass  # idempotency may block second call first
 
         # Third call should hit rate limit or idempotency
         result = execute_tool(
-            "order_status_lookup", {"order_id": "ORD-12345"}, session_id, "support"
+            "order_status_lookup", {"order_id": "ORD-12345"}, session_id, "account_agent"
         )
         assert result.status == "blocked"
         assert result.block_reason in ("rate_limit", "duplicate_call")
@@ -210,7 +216,7 @@ class TestT057DollarCap:
                 "reason": "testing cap",
             },
             session_id=_sid(),
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "dollar_cap"
@@ -224,7 +230,7 @@ class TestT057DollarCap:
                 "reason": "defective",
             },
             session_id=_sid(),
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "pending_approval"
         assert result.approval_id is not None
@@ -241,7 +247,7 @@ class TestT058InvalidParams:
             tool_name="order_status_lookup",
             parameters={},
             session_id=_sid(),
-            agent_type="support",
+            agent_type="account_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "invalid_params"
@@ -251,7 +257,7 @@ class TestT058InvalidParams:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12345"},
             session_id=_sid(),
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "invalid_params"
@@ -268,7 +274,7 @@ class TestT059RefundEligibility:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12348", "amount": 50.0, "reason": "cancelled"},
             session_id=_sid(),
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "refund_ineligible"
@@ -278,7 +284,7 @@ class TestT059RefundEligibility:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12347", "amount": 20.0, "reason": "pending"},
             session_id=_sid(),
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "refund_ineligible"
@@ -295,7 +301,7 @@ class TestT060HighRiskApprovalRouting:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12345", "amount": 50.0, "reason": "defective"},
             session_id=_sid(),
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "pending_approval"
         assert result.approval_id is not None
@@ -306,7 +312,7 @@ class TestT060HighRiskApprovalRouting:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12345", "amount": 40.0, "reason": "wrong item"},
             session_id=_sid(),
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.approval_id in _approval_store
         approval = _approval_store[result.approval_id]
@@ -356,7 +362,7 @@ class TestT062UnregisteredTool:
             tool_name="completely_fake_tool",
             parameters={"key": "value"},
             session_id=_sid(),
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "unknown_tool"

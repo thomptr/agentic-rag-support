@@ -20,10 +20,6 @@ from src.api.schemas import (
 )
 from src.config import settings
 
-# Eager-imported so tests can `@patch("src.api.main.graph", ...)`. In cloud
-# mode this module attribute is unused by the request path but cheap to load.
-from src.graph.workflow import graph  # noqa: E402, F401 — see comment above
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -144,7 +140,12 @@ def query_endpoint(
             langfuse_trace_id=raw.get("langfuse_trace_id"),
         )
 
-    # Local mode: invoke graph directly (imported at module top so tests can patch it)
+    # Local mode: invoke graph directly. Lazy import so the cloud-mode API
+    # container doesn't need LangGraph/langchain installed (cloud delegates
+    # graph execution to the AgentCore Runtime). Tests should patch the
+    # source module, e.g. `@patch("src.graph.workflow.graph")`.
+    from src.graph.workflow import graph
+
     initial_state = {
         "query_id": query_id,
         "query_text": request.query_text,
@@ -152,7 +153,7 @@ def query_endpoint(
         "classified_domain": None,
         "classified_domains": None,
         "confidence_rationale": None,
-        "routed_to_agent": None,
+        "current_node": None,
         "retrieved_documents": None,
         "response_text": None,
         "citations": None,
@@ -229,7 +230,7 @@ def query_endpoint(
     return QueryResponse(
         query_id=query_id,
         response_text=result.get("response_text") or "",
-        agent=result.get("routed_to_agent") or "unknown",
+        agent=result.get("current_node") or "unknown",
         routing_rationale=result.get("confidence_rationale"),
         citations=citations,
         metadata=QueryMetadata(

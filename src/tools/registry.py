@@ -158,9 +158,17 @@ def get_tool(name: str) -> ToolDefinition | None:
 
 
 def get_tool_descriptions(agent_type: str | None = None) -> list[dict]:
+    # Profile allowlist is the source of truth (see profiles.py). The old
+    # tool-side `allowed_agents=["support"]` predates per-domain agents and
+    # would silently match nothing for billing_agent/technical_agent/etc.
     tools = list(_REGISTRY.values())
     if agent_type is not None:
-        tools = [t for t in tools if agent_type in t.allowed_agents]
+        from src.agents.profiles import get_profile
+
+        profile = get_profile(agent_type)
+        if profile is None:
+            return []
+        tools = [t for t in tools if t.name in profile.tool_allowlist]
     result = []
     for tool in tools:
         schema = tool.input_schema.model_json_schema()
@@ -173,3 +181,62 @@ def get_tool_descriptions(agent_type: str | None = None) -> list[dict]:
             }
         )
     return result
+
+
+def llm_tool_calls_to_planned(response_tool_calls: list[dict] | None) -> list[dict]:
+    """Map a LangChain AIMessage `.tool_calls` list to the executor's shape.
+
+    LangChain emits `{name, args, id, type}`; the executor expects
+    `{tool_name, parameters, risk_level, reason}`. Tools not in the registry
+    are skipped (defensive — bind_tools shouldn't let this happen, but if the
+    LLM hallucinates a name we don't want it to crash downstream).
+    """
+    planned: list[dict] = []
+    for tc in response_tool_calls or []:
+        name = tc.get("name")
+        if not name:
+            continue
+        tool = _REGISTRY.get(name)
+        if tool is None:
+            continue
+        planned.append(
+            {
+                "tool_name": name,
+                "parameters": tc.get("args") or {},
+                "risk_level": tool.risk_level,
+                "reason": "llm-selected",
+            }
+        )
+    return planned
+
+
+def get_tools_for_agent(agent_name: str) -> list[dict]:
+    """Return OpenAI-function-format tool definitions for the named agent.
+
+    Filtered by the agent profile's `tool_allowlist`. Returns [] for unknown
+    agents or empty allowlists (e.g. response_generator fallback). The result
+    plugs straight into `llm.bind_tools(...)` so the LLM can natively emit
+    structured tool calls.
+    """
+    from src.agents.profiles import get_profile
+
+    profile = get_profile(agent_name)
+    if profile is None or not profile.tool_allowlist:
+        return []
+
+    tools: list[dict] = []
+    for name in profile.tool_allowlist:
+        tool = _REGISTRY.get(name)
+        if tool is None:
+            continue
+        tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.input_schema.model_json_schema(),
+                },
+            }
+        )
+    return tools

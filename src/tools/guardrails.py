@@ -86,11 +86,46 @@ _idempotency_store: dict[str, str] = {}
 
 
 def validate_agent_allowlist(agent_type: str, tool_name: str, allowed_agents: list[str]) -> None:
-    """Raise UnknownToolError if agent_type is not in tool's allowed_agents."""
+    """Legacy interface — prefer `validate_agent_can_use_tool` (profile-based).
+
+    Kept for backwards compatibility with callers that still pass a tool-side
+    allowed_agents list. Behaves the same as before: if `agent_type` isn't in
+    the list, raise.
+    """
     if not allowed_agents or agent_type not in allowed_agents:
         raise UnknownToolError(
             f"Agent '{agent_type}' is not permitted to call tool '{tool_name}'. "
             f"Allowed agents: {allowed_agents}"
+        )
+
+
+def validate_agent_can_use_tool(current_node: str, tool_name: str, tool_risk_level: str) -> None:
+    """Profile-based deny-by-default tool gate (new in the domain-agents refactor).
+
+    Two checks in one call:
+    1. Tool must be in the agent's explicit `tool_allowlist`.
+    2. Tool's `risk_level` must be permitted by the agent's `max_risk_level`.
+
+    Both gates close — an empty allowlist (the response_generator fallback)
+    blocks every tool regardless of risk level. A high-risk tool is blocked
+    even if it slips into a low-risk agent's allowlist accidentally.
+    """
+    from src.agents.profiles import get_profile
+
+    profile = get_profile(current_node)
+    if profile is None:
+        raise UnknownToolError(
+            f"No agent profile registered for {current_node!r}; cannot evaluate tool access"
+        )
+    if tool_name not in profile.tool_allowlist:
+        raise UnknownToolError(
+            f"Agent {current_node!r} is not allowed to call tool {tool_name!r} "
+            f"(allowlist: {sorted(profile.tool_allowlist) or '∅'})"
+        )
+    if not profile.permits_risk(tool_risk_level):
+        raise UnknownToolError(
+            f"Agent {current_node!r} (max_risk={profile.max_risk_level!r}) cannot invoke "
+            f"tool {tool_name!r} at risk_level={tool_risk_level!r}"
         )
 
 

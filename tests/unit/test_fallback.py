@@ -8,7 +8,7 @@ def _make_state(query_text="random query"):
         "messages": [],
         "classified_domain": "unknown",
         "confidence_rationale": "Cannot classify",
-        "routed_to_agent": None,
+        "current_node": None,
         "retrieved_documents": None,
         "response_text": None,
         "citations": None,

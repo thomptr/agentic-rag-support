@@ -130,7 +130,7 @@ def supervisor(state: SupportGraphState) -> Command:
     State writes:
         - classified_domain: "billing" | "technical" | "account" | "unknown"
         - confidence_rationale: str
-        - routed_to_agent: str
+        - current_node: str
         - log_events: appended with routing_decision event
     """
 ```
