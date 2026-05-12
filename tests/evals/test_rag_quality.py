@@ -77,7 +77,7 @@ def _run_graph_for_question(question: str) -> dict:
         "classified_domain": None,
         "classified_domains": None,
         "confidence_rationale": None,
-        "routed_to_agent": None,
+        "current_node": None,
         "retrieved_documents": None,
         "response_text": None,
         "citations": None,

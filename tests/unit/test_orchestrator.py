@@ -1,9 +1,36 @@
-"""Unit tests for execute_tool() wrapper (T006 — must FAIL before implementation)."""
+"""Unit tests for execute_tool() wrapper.
+
+After the Gateway cutover (FR-014), kind="gateway" tools dispatch via
+`src.tools.gateway_executor.invoke`. These tests autouse-patch that boundary
+so they remain hermetic — they validate the executor's guardrails/approval
+orchestration without standing up a real AgentCore Gateway.
+"""
 
 import uuid
 from unittest.mock import MagicMock, patch
 
-from src.tools.executor import ToolResult, execute_tool
+import pytest
+
+from src.tools.orchestrator import ToolResult, execute_tool
+
+
+@pytest.fixture(autouse=True)
+def _stub_gateway(monkeypatch):
+    """Make all kind='gateway' dispatches succeed with a synthetic result."""
+    from src.tools import gateway_executor
+
+    monkeypatch.setattr("src.tools.orchestrator.settings.gateway_url", "https://test.gw")
+
+    def _fake_invoke(*, tool_name, parameters, session_id, agent_type, trace_meta):
+        return gateway_executor.ToolResult(
+            tool_name=tool_name,
+            status="success",
+            result={"order_id": parameters.get("order_id", "ORD-x"), "status": "delivered"},
+            error=None,
+        )
+
+    monkeypatch.setattr(gateway_executor, "invoke", _fake_invoke)
+    yield
 
 
 class TestToolResult:
@@ -31,7 +58,7 @@ class TestExecuteTool:
             tool_name="order_status_lookup",
             parameters={"order_id": "ORD-12345"},
             session_id=session_id,
-            agent_type="support",
+            agent_type="account_agent",
         )
         assert result.status == "success"
         assert result.result is not None
@@ -43,7 +70,7 @@ class TestExecuteTool:
             tool_name="nonexistent_tool",
             parameters={},
             session_id=session_id,
-            agent_type="support",
+            agent_type="account_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "unknown_tool"
@@ -54,7 +81,7 @@ class TestExecuteTool:
             tool_name="order_status_lookup",
             parameters={},
             session_id=session_id,
-            agent_type="support",
+            agent_type="account_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "invalid_params"
@@ -65,7 +92,7 @@ class TestExecuteTool:
             tool_name="order_status_lookup",
             parameters={"order_id": "ORD-12345"},
             session_id=session_id,
-            agent_type="billing",
+            agent_type="billing_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "unknown_tool"
@@ -76,7 +103,7 @@ class TestExecuteTool:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12345", "amount": 999.0, "reason": "test"},
             session_id=session_id,
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "dollar_cap"
@@ -87,14 +114,14 @@ class TestExecuteTool:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12345", "amount": 50.0, "reason": "defective"},
             session_id=session_id,
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "pending_approval"
         assert result.approval_id is not None
 
     def test_tool_execution_error_returns_failed(self):
         session_id = self._session()
-        with patch("src.tools.executor.get_tool") as mock_get:
+        with patch("src.tools.orchestrator.get_tool") as mock_get:
             mock_tool = MagicMock()
             mock_tool.name = "order_status_lookup"
             mock_tool.risk_level = "read-only"
@@ -110,7 +137,7 @@ class TestExecuteTool:
                 tool_name="order_status_lookup",
                 parameters={"order_id": "ORD-12345"},
                 session_id=session_id,
-                agent_type="support",
+                agent_type="account_agent",
             )
         assert result.status == "failed"
         assert result.error is not None

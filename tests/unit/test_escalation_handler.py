@@ -6,7 +6,7 @@ def _make_state(signals=None, reason="account_takeover"):
         "classified_domain": "account",
         "classified_domains": ["account"],
         "confidence_rationale": None,
-        "routed_to_agent": "escalation_handler",
+        "current_node": "escalation_handler",
         "retrieved_documents": None,
         "response_text": None,
         "citations": None,
@@ -41,7 +41,7 @@ class TestEscalationHandler:
 
         assert "security team" in result["response_text"].lower()
         assert result["citations"] == []
-        assert result["routed_to_agent"] == "escalation_handler"
+        assert result["current_node"] == "escalation_handler"
 
     def test_emits_escalation_triggered_event(self):
         from src.agents.escalation_handler import escalation_handler

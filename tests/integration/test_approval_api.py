@@ -5,7 +5,7 @@ import uuid
 from fastapi.testclient import TestClient
 
 from src.api.main import app
-from src.tools.executor import execute_tool
+from src.tools.orchestrator import execute_tool
 
 client = TestClient(app)
 
@@ -39,7 +39,7 @@ class TestApprovalWorkflowAPI:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12345", "amount": 60.0, "reason": "defective product"},
             session_id=session_id,
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert tool_result.status == "pending_approval"
         approval_id = tool_result.approval_id
@@ -66,7 +66,7 @@ class TestApprovalWorkflowAPI:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12345", "amount": 30.0, "reason": "wrong item"},
             session_id=session_id,
-            agent_type="support",
+            agent_type="billing_agent",
         )
         approval_id = tool_result.approval_id
 
@@ -86,7 +86,7 @@ class TestApprovalWorkflowAPI:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12345", "amount": 25.0, "reason": "dissatisfied"},
             session_id=session_id,
-            agent_type="support",
+            agent_type="billing_agent",
         )
         approval_id = tool_result.approval_id
 

@@ -21,7 +21,7 @@ class SupportGraphState(TypedDict):
 
     classified_domain: Literal["billing", "technical", "account", "unknown"] | None
     confidence_rationale: str | None
-    routed_to_agent: str | None
+    current_node: str | None
 
     retrieved_documents: list[dict] | None
 

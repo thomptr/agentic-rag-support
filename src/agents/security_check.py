@@ -77,7 +77,7 @@ def security_check(state: SupportGraphState) -> Command:
                 "security_signals": signals,
                 "escalation_required": True,
                 "escalation_reason": blocking["name"],
-                "routed_to_agent": "escalation_handler",
+                "current_node": "escalation_handler",
                 "log_events": [check_event],
             },
         )

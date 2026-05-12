@@ -1,17 +1,68 @@
-"""Integration tests for tool execution through the graph (T039, T055, T056-T062).
+"""Integration tests for tool execution through the orchestrator.
 
-These tests exercise the tool pipeline directly (without the full LangGraph graph)
-to avoid needing an LLM/DB connection. They test execute_tool() end-to-end.
+These exercise guardrails + approval + dispatch end-to-end. After the Gateway
+cutover (FR-014), the dispatch step routes through `gateway_executor.invoke`.
+We autouse-patch that boundary so the tests stay hermetic (no live Gateway).
 """
 
 import uuid
 
 import pytest
 
-from src.tools.executor import execute_tool
 from src.tools.guardrails import (
     _approval_store,
 )
+from src.tools.orchestrator import execute_tool
+
+
+@pytest.fixture(autouse=True)
+def _stub_gateway(monkeypatch):
+    """Make all kind='gateway' dispatches succeed with a synthetic result.
+
+    Returns shapes matching what the live Lambdas would emit so downstream
+    assertions about `result` fields (ticket_id, order_id, refund_id) still
+    have something realistic to read.
+    """
+    from src.tools import gateway_executor
+
+    monkeypatch.setattr("src.tools.orchestrator.settings.gateway_url", "https://test.gw")
+
+    _SYNTHETIC_RESULTS = {
+        # status="shipped" matches the value the legacy in-process mock returned,
+        # which several tests assert against.
+        "order_status_lookup": {
+            "order_id": "ORD-12346",
+            "status": "shipped",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-02T00:00:00Z",
+            "items": [{"sku": "X", "qty": 1}],
+            "total": 49.99,
+            "tracking_number": "TRK-12346",
+        },
+        "create_support_ticket": {
+            "ticket_id": "TKT-INTEG01",
+            "status": "open",
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+        "issue_refund": {
+            "refund_id": "REF-INTEG01",
+            "order_id": "ORD-12346",
+            "amount": 49.99,
+            "status": "processed",
+            "processed_at": "2026-01-01T00:00:00Z",
+        },
+    }
+
+    def _fake_invoke(*, tool_name, parameters, session_id, agent_type, trace_meta):
+        return gateway_executor.ToolResult(
+            tool_name=tool_name,
+            status="success",
+            result=_SYNTHETIC_RESULTS.get(tool_name, {"ok": True}),
+            error=None,
+        )
+
+    monkeypatch.setattr(gateway_executor, "invoke", _fake_invoke)
+    yield
 
 
 def _sid() -> str:
@@ -29,7 +80,7 @@ class TestUS1AutonomousExecution:
             tool_name="order_status_lookup",
             parameters={"order_id": "ORD-12345"},
             session_id=_sid(),
-            agent_type="support",
+            agent_type="account_agent",
         )
         assert result.status == "success"
         assert result.result["status"] == "shipped"
@@ -45,7 +96,7 @@ class TestUS1AutonomousExecution:
                 "category": "billing",
             },
             session_id=_sid(),
-            agent_type="support",
+            agent_type="account_agent",
         )
         assert result.status == "success"
         assert result.result["ticket_id"].startswith("TKT-")
@@ -65,7 +116,7 @@ class TestUS3MultiToolSequencing:
             tool_name="order_status_lookup",
             parameters={"order_id": "ORD-12345"},
             session_id=session_id,
-            agent_type="support",
+            agent_type="account_agent",
         )
         assert order_result.status == "success"
         order_status = order_result.result["status"]
@@ -77,14 +128,16 @@ class TestUS3MultiToolSequencing:
                 "description": "Customer reported issue. Order status from lookup: " + order_status,
             },
             session_id=session_id,
-            agent_type="support",
+            agent_type="account_agent",
         )
         assert ticket_result.status == "success"
         assert ticket_result.result["ticket_id"].startswith("TKT-")
 
     def test_both_results_have_correct_structure(self):
         session_id = _sid()
-        r1 = execute_tool("order_status_lookup", {"order_id": "ORD-12346"}, session_id, "support")
+        r1 = execute_tool(
+            "order_status_lookup", {"order_id": "ORD-12346"}, session_id, "account_agent"
+        )
         r2 = execute_tool(
             "create_support_ticket",
             {
@@ -92,7 +145,7 @@ class TestUS3MultiToolSequencing:
                 "description": f"Order delivered: {r1.result}",
             },
             session_id,
-            "support",
+            "account_agent",
         )
         assert r1.status == "success"
         assert r2.status == "success"
@@ -128,14 +181,18 @@ class TestT056RateLimit:
         tool.rate_limit = 2
 
         try:
-            execute_tool("order_status_lookup", {"order_id": "ORD-12345"}, session_id, "support")
-            execute_tool("order_status_lookup", {"order_id": "ORD-12345"}, session_id, "support")
+            execute_tool(
+                "order_status_lookup", {"order_id": "ORD-12345"}, session_id, "account_agent"
+            )
+            execute_tool(
+                "order_status_lookup", {"order_id": "ORD-12345"}, session_id, "account_agent"
+            )
         except Exception:
             pass  # idempotency may block second call first
 
         # Third call should hit rate limit or idempotency
         result = execute_tool(
-            "order_status_lookup", {"order_id": "ORD-12345"}, session_id, "support"
+            "order_status_lookup", {"order_id": "ORD-12345"}, session_id, "account_agent"
         )
         assert result.status == "blocked"
         assert result.block_reason in ("rate_limit", "duplicate_call")
@@ -159,7 +216,7 @@ class TestT057DollarCap:
                 "reason": "testing cap",
             },
             session_id=_sid(),
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "dollar_cap"
@@ -173,7 +230,7 @@ class TestT057DollarCap:
                 "reason": "defective",
             },
             session_id=_sid(),
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "pending_approval"
         assert result.approval_id is not None
@@ -190,7 +247,7 @@ class TestT058InvalidParams:
             tool_name="order_status_lookup",
             parameters={},
             session_id=_sid(),
-            agent_type="support",
+            agent_type="account_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "invalid_params"
@@ -200,7 +257,7 @@ class TestT058InvalidParams:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12345"},
             session_id=_sid(),
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "invalid_params"
@@ -217,7 +274,7 @@ class TestT059RefundEligibility:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12348", "amount": 50.0, "reason": "cancelled"},
             session_id=_sid(),
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "refund_ineligible"
@@ -227,7 +284,7 @@ class TestT059RefundEligibility:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12347", "amount": 20.0, "reason": "pending"},
             session_id=_sid(),
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "refund_ineligible"
@@ -244,7 +301,7 @@ class TestT060HighRiskApprovalRouting:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12345", "amount": 50.0, "reason": "defective"},
             session_id=_sid(),
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "pending_approval"
         assert result.approval_id is not None
@@ -255,7 +312,7 @@ class TestT060HighRiskApprovalRouting:
             tool_name="issue_refund",
             parameters={"order_id": "ORD-12345", "amount": 40.0, "reason": "wrong item"},
             session_id=_sid(),
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.approval_id in _approval_store
         approval = _approval_store[result.approval_id]
@@ -305,7 +362,7 @@ class TestT062UnregisteredTool:
             tool_name="completely_fake_tool",
             parameters={"key": "value"},
             session_id=_sid(),
-            agent_type="support",
+            agent_type="billing_agent",
         )
         assert result.status == "blocked"
         assert result.block_reason == "unknown_tool"

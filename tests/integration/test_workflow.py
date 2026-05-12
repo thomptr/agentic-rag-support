@@ -15,7 +15,7 @@ def _make_state(query_text, query_id="integ-001", run_id="integ-run-001"):
         "classified_domain": None,
         "classified_domains": None,
         "confidence_rationale": None,
-        "routed_to_agent": None,
+        "current_node": None,
         "retrieved_documents": None,
         "response_text": None,
         "citations": None,
@@ -168,7 +168,7 @@ def test_unroutable_query_uses_fallback(mock_sup_cls):
         _make_state("What is the weather today?", "integ-004", "integ-run-004")
     )
 
-    assert result.get("routed_to_agent") == "fallback_handler"
+    assert result.get("current_node") == "fallback_handler"
     assert result.get("response_text") is not None
     assert result.get("citations") == []
 

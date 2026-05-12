@@ -1,0 +1,5 @@
+project     = "agentic-rag"
+env         = "dev"
+region      = "us-east-1"
+db_name     = "agentic_rag"
+db_username = "agentic_rag_admin"

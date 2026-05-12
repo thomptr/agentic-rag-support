@@ -6,7 +6,7 @@ def _make_state(merged_results=None, retrieval_attempt=1, max_retrieval_attempts
         "classified_domain": None,
         "classified_domains": ["billing"],
         "confidence_rationale": None,
-        "routed_to_agent": None,
+        "current_node": None,
         "retrieved_documents": None,
         "response_text": None,
         "citations": None,
@@ -48,28 +48,35 @@ class TestConfidenceCheck:
 
         assert command.goto == "retrieval_planner"
 
-    def test_proceed_on_high_confidence(self):
+    def test_proceed_on_high_confidence_dispatches_to_domain_agent(self):
+        """High confidence + classified_domains=['billing'] → billing_agent.
+
+        Post-refactor confidence_check dispatches to the domain-specific agent
+        rather than the generic response_generator. _make_state defaults to
+        classified_domains=['billing'].
+        """
         from src.agents.confidence_check import confidence_check
 
         state = _make_state(merged_results=_make_high_conf_docs(5, score=0.85))
         command = confidence_check(state)
 
-        assert command.goto == "response_generator"
+        assert command.goto == "billing_agent"
         assert command.update["retrieval_confidence"]["should_retry"] is False
 
     def test_stop_after_max_retrieval_attempts(self):
         from src.agents.confidence_check import confidence_check
         from src.config import settings
 
-        # Even with low confidence, should not retry at max attempts
+        # Even with low confidence, should not retry at max attempts.
         state = _make_state(
             merged_results=_make_low_conf_docs(1, score=0.1),
             retrieval_attempt=settings.max_retrieval_attempts,
         )
         command = confidence_check(state)
 
-        # Must proceed to response_generator even with low confidence
-        assert command.goto == "response_generator"
+        # Proceed to the domain agent (billing per _make_state default) even
+        # though confidence is low — the retry budget is exhausted.
+        assert command.goto == "billing_agent"
 
     def test_emits_confidence_assessment_log_event(self):
         from src.agents.confidence_check import confidence_check

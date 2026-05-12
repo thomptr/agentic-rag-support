@@ -6,7 +6,7 @@ def _make_state(query_text):
         "classified_domain": "account",
         "classified_domains": ["account"],
         "confidence_rationale": None,
-        "routed_to_agent": None,
+        "current_node": None,
         "retrieved_documents": None,
         "response_text": None,
         "citations": None,

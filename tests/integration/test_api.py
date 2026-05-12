@@ -27,7 +27,7 @@ def _mock_graph_result(
         "classified_domain": (classified_domains or ["billing"])[0],
         "classified_domains": classified_domains or ["billing"],
         "confidence_rationale": "test rationale",
-        "routed_to_agent": "response_generator",
+        "current_node": "response_generator",
         "citations": citations
         or [
             {
@@ -64,7 +64,7 @@ def _mock_graph_result(
 # --- T042: Updated API response schema tests ---
 
 
-@patch("src.api.main.graph")
+@patch("src.graph.workflow.graph")
 def test_post_query_returns_200(mock_graph, client):
     mock_graph.invoke.return_value = _mock_graph_result()
 
@@ -77,7 +77,7 @@ def test_post_query_returns_200(mock_graph, client):
     assert "metadata" in data
 
 
-@patch("src.api.main.graph")
+@patch("src.graph.workflow.graph")
 def test_post_query_returns_classified_domains(mock_graph, client):
     mock_graph.invoke.return_value = _mock_graph_result(classified_domains=["billing", "account"])
 
@@ -91,7 +91,7 @@ def test_post_query_returns_classified_domains(mock_graph, client):
     assert len(data["metadata"]["classified_domains"]) == 2
 
 
-@patch("src.api.main.graph")
+@patch("src.graph.workflow.graph")
 def test_post_query_returns_retrieval_attempts(mock_graph, client):
     mock_graph.invoke.return_value = _mock_graph_result(retrieval_attempt=2)
 
@@ -102,7 +102,7 @@ def test_post_query_returns_retrieval_attempts(mock_graph, client):
     assert data["metadata"]["retrieval_attempts"] == 2
 
 
-@patch("src.api.main.graph")
+@patch("src.graph.workflow.graph")
 def test_post_query_returns_documents_retrieved(mock_graph, client):
     mock_graph.invoke.return_value = _mock_graph_result(
         raw_retrieval_results=[{"content": f"doc {i}"} for i in range(8)],
@@ -118,7 +118,7 @@ def test_post_query_returns_documents_retrieved(mock_graph, client):
     assert data["metadata"]["documents_after_dedup"] == 6
 
 
-@patch("src.api.main.graph")
+@patch("src.graph.workflow.graph")
 def test_post_query_returns_retrieval_confidence(mock_graph, client):
     mock_graph.invoke.return_value = _mock_graph_result(retrieval_confidence_score=0.87)
 
@@ -129,7 +129,7 @@ def test_post_query_returns_retrieval_confidence(mock_graph, client):
     assert abs(data["metadata"]["retrieval_confidence"] - 0.87) < 0.001
 
 
-@patch("src.api.main.graph")
+@patch("src.graph.workflow.graph")
 def test_post_query_citations_include_domain(mock_graph, client):
     mock_graph.invoke.return_value = _mock_graph_result(
         citations=[
@@ -166,7 +166,7 @@ def test_post_query_citations_include_domain(mock_graph, client):
         assert "score" in citation
 
 
-@patch("src.api.main.graph")
+@patch("src.graph.workflow.graph")
 def test_post_query_response_schema(mock_graph, client):
     mock_graph.invoke.return_value = _mock_graph_result()
 

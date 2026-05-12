@@ -40,6 +40,6 @@ def escalation_handler(state: SupportGraphState) -> dict:
     return {
         "response_text": _ESCALATION_RESPONSE,
         "citations": [],
-        "routed_to_agent": "escalation_handler",
+        "current_node": "escalation_handler",
         "log_events": [escalation_event, response_event],
     }

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from src.tools.executor import execute_tool
 from src.tools.guardrails import ApprovalRequest, _approval_store
+from src.tools.orchestrator import execute_tool
 
 
 def create_approval(

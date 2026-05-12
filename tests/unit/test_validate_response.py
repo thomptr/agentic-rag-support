@@ -8,7 +8,7 @@ def _make_state(response_text=None, citations=None, retrieved_docs=None):
         "messages": [],
         "classified_domain": "billing",
         "confidence_rationale": "test",
-        "routed_to_agent": "billing_agent",
+        "current_node": "billing_agent",
         "retrieved_documents": retrieved_docs,
         "response_text": response_text,
         "citations": citations,

@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     )
 
     openai_api_key: str = ""
+    openai_api_key_arn: str = ""  # set in cloud mode; resolved at startup by entrypoint
     database_url: str = (
         "postgresql+psycopg://agentic_rag:agentic_rag_dev@localhost:5432/agentic_rag"
     )
@@ -28,6 +29,22 @@ class Settings(BaseSettings):
     tool_dollar_cap: float = 100.0
     approval_timeout_seconds: int = 300
     tool_execution_enabled: bool = True
+
+    # AgentCore deployment settings (005)
+    deployment_mode: str = "local"  # "local" | "cloud"
+    aws_region: str = "us-east-1"
+    agentcore_endpoint_url: str = ""
+    agentcore_runtime_arn: str = ""
+    agentcore_memory_enabled: bool = True
+    agentcore_max_sessions: int = 1000
+
+    # AgentCore Tool Gateway + Cognito M2M settings (005 refactor)
+    gateway_url: str = ""
+    cognito_token_url: str = ""
+    cognito_client_id: str = ""
+    cognito_client_secret_arn: str = ""
+    cognito_client_secret: str = ""  # resolved from Secrets Manager at startup
+    cognito_scope: str = ""
 
 
 settings = Settings()

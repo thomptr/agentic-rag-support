@@ -22,6 +22,6 @@ def fallback_handler(state: SupportGraphState) -> dict:
     return {
         "response_text": response_text,
         "citations": [],
-        "routed_to_agent": "fallback_handler",
+        "current_node": "fallback_handler",
         "log_events": [response_event],
     }

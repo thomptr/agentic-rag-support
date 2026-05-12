@@ -17,7 +17,7 @@ def _make_state(query_text):
         "classified_domain": None,
         "classified_domains": None,
         "confidence_rationale": None,
-        "routed_to_agent": None,
+        "current_node": None,
         "retrieved_documents": None,
         "response_text": None,
         "citations": None,

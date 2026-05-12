@@ -68,7 +68,7 @@ class SupportGraphState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     classified_domain: Literal["billing", "technical", "account", "unknown"] | None
     confidence_rationale: str | None
-    routed_to_agent: str | None
+    current_node: str | None
     retrieved_documents: list[dict] | None
     response_text: str | None
     citations: list[dict] | None

@@ -62,6 +62,11 @@ class QueryResponse(BaseModel):
     tool_calls: list[ToolCallResult] = []
     action_taken: bool = False
     pending_approvals: list[ApprovalItem] = []
+    # T124: trace identifier the agent generates per invocation. When the agent
+    # publishes Langfuse spans, this id is used as the trace_id so a developer
+    # can look the request up directly. When Langfuse isn't configured, it's
+    # still useful as a request-correlation key for CloudWatch log searches.
+    langfuse_trace_id: str | None = None
 
 
 class HealthResponse(BaseModel):

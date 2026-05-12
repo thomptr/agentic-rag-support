@@ -7,12 +7,12 @@ down:
 	docker compose down
 
 lint:
-	.venv/bin/ruff check src/ tests/
-	.venv/bin/ruff format --check src/ tests/
+	.venv/bin/ruff check src/ tests/ lambdas/
+	.venv/bin/ruff format --check src/ tests/ lambdas/
 
 lint-fix:
-	.venv/bin/ruff check --fix src/ tests/
-	.venv/bin/ruff format src/ tests/
+	.venv/bin/ruff check --fix src/ tests/ lambdas/
+	.venv/bin/ruff format src/ tests/ lambdas/
 
 seed:
 	python -m src.rag.ingest
@@ -21,7 +21,7 @@ test:
 	.venv/bin/pytest tests/
 
 test-unit:
-	.venv/bin/pytest tests/unit/
+	.venv/bin/pytest tests/unit/ lambdas/
 
 test-int:
 	.venv/bin/pytest tests/integration/

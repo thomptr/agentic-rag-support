@@ -21,7 +21,7 @@ def _mock_graph_result(guardrails_enabled=None, model_override=None):
         "classified_domain": "billing",
         "classified_domains": ["billing"],
         "confidence_rationale": "test rationale",
-        "routed_to_agent": "response_generator",
+        "current_node": "response_generator",
         "citations": [],
         "raw_retrieval_results": [],
         "merged_results": [],
@@ -45,13 +45,13 @@ def _mock_graph_result(guardrails_enabled=None, model_override=None):
 
 
 class TestQueryOverrides:
-    @patch("src.api.main.graph")
+    @patch("src.graph.workflow.graph")
     def test_query_without_overrides_returns_200(self, mock_graph, client):
         mock_graph.invoke.return_value = _mock_graph_result()
         response = client.post("/query", json={"query_text": "Help with billing"})
         assert response.status_code == 200
 
-    @patch("src.api.main.graph")
+    @patch("src.graph.workflow.graph")
     def test_guardrails_enabled_true_accepted(self, mock_graph, client):
         mock_graph.invoke.return_value = _mock_graph_result(guardrails_enabled=True)
         response = client.post(
@@ -63,7 +63,7 @@ class TestQueryOverrides:
         state = mock_graph.invoke.call_args[0][0]
         assert state["guardrails_enabled"] is True
 
-    @patch("src.api.main.graph")
+    @patch("src.graph.workflow.graph")
     def test_guardrails_enabled_false_accepted(self, mock_graph, client):
         mock_graph.invoke.return_value = _mock_graph_result(guardrails_enabled=False)
         response = client.post(
@@ -74,7 +74,7 @@ class TestQueryOverrides:
         state = mock_graph.invoke.call_args[0][0]
         assert state["guardrails_enabled"] is False
 
-    @patch("src.api.main.graph")
+    @patch("src.graph.workflow.graph")
     def test_guardrails_none_passes_none_to_graph(self, mock_graph, client):
         mock_graph.invoke.return_value = _mock_graph_result()
         response = client.post("/query", json={"query_text": "Help"})
@@ -82,7 +82,7 @@ class TestQueryOverrides:
         state = mock_graph.invoke.call_args[0][0]
         assert state["guardrails_enabled"] is None
 
-    @patch("src.api.main.graph")
+    @patch("src.graph.workflow.graph")
     def test_model_override_gpt4o_mini_accepted(self, mock_graph, client):
         mock_graph.invoke.return_value = _mock_graph_result(model_override="gpt-4o-mini")
         response = client.post(
@@ -93,7 +93,7 @@ class TestQueryOverrides:
         state = mock_graph.invoke.call_args[0][0]
         assert state["model_override"] == "gpt-4o-mini"
 
-    @patch("src.api.main.graph")
+    @patch("src.graph.workflow.graph")
     def test_model_override_gpt4o_accepted(self, mock_graph, client):
         mock_graph.invoke.return_value = _mock_graph_result(model_override="gpt-4o")
         response = client.post(
@@ -104,7 +104,7 @@ class TestQueryOverrides:
         state = mock_graph.invoke.call_args[0][0]
         assert state["model_override"] == "gpt-4o"
 
-    @patch("src.api.main.graph")
+    @patch("src.graph.workflow.graph")
     def test_model_override_claude_accepted(self, mock_graph, client):
         mock_graph.invoke.return_value = _mock_graph_result(model_override="claude-sonnet-4-6")
         response = client.post(
@@ -122,7 +122,7 @@ class TestQueryOverrides:
         )
         assert response.status_code == 422
 
-    @patch("src.api.main.graph")
+    @patch("src.graph.workflow.graph")
     def test_model_override_none_passes_none_to_graph(self, mock_graph, client):
         mock_graph.invoke.return_value = _mock_graph_result()
         response = client.post("/query", json={"query_text": "Help"})
@@ -130,7 +130,7 @@ class TestQueryOverrides:
         state = mock_graph.invoke.call_args[0][0]
         assert state["model_override"] is None
 
-    @patch("src.api.main.graph")
+    @patch("src.graph.workflow.graph")
     def test_both_overrides_together(self, mock_graph, client):
         mock_graph.invoke.return_value = _mock_graph_result(
             guardrails_enabled=True, model_override="gpt-4o"

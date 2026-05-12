@@ -216,7 +216,7 @@
 
 ### End-to-End Verification
 
-- [ ] T076 [US4] Re-enable / restore `tests/evals/test_end_to_end.py::test_account_agent_triggers_escalation_for_takeover` so it asserts the new path: `escalation_triggered` event present, `routed_to_agent == "escalation_handler"`, citations is empty
+- [ ] T076 [US4] Re-enable / restore `tests/evals/test_end_to_end.py::test_account_agent_triggers_escalation_for_takeover` so it asserts the new path: `escalation_triggered` event present, `current_node == "escalation_handler"`, citations is empty
 - [ ] T077 [P] [US4] Add a routing accuracy eval in `tests/evals/test_routing_accuracy.py` covering 3+ takeover-phrasing variants and 3+ benign account queries; assert 100% correct policy gating per SC-007
 
 **Checkpoint**: SC-007, SC-008, SC-009 satisfied. Adding a future policy category (e.g., PII redaction) requires only updates to `security_check.py` and its tests — no changes to retrieval, generation, or supervisor.

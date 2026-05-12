@@ -46,7 +46,7 @@ ignore = ["E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = ["tests", "lambdas"]
 markers = [
     "eval: evaluation tests that call real LLMs",
     "integration: integration tests that require running Postgres",

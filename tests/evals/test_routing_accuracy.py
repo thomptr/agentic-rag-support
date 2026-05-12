@@ -54,7 +54,7 @@ def _make_initial_state(query_text: str) -> dict:
         "classified_domain": None,
         "classified_domains": None,
         "confidence_rationale": None,
-        "routed_to_agent": None,
+        "current_node": None,
         "retrieved_documents": None,
         "response_text": None,
         "citations": None,
@@ -129,7 +129,7 @@ def test_classifiable_queries_route_to_retrieval_pipeline():
 
     for query_text, expected_primary, _ in TEST_QUERIES:
         result = graph.invoke(_make_initial_state(query_text))
-        routed_to = result.get("routed_to_agent", "")
+        routed_to = result.get("current_node", "")
         assert routed_to != "fallback_handler", (
             f"Expected '{query_text}' to route through retrieval pipeline, "
             f"but it went to fallback_handler"
@@ -143,7 +143,7 @@ def test_response_generator_produces_citations():
     for query_text, _, _ in TEST_QUERIES:
         result = graph.invoke(_make_initial_state(query_text))
 
-        if result.get("routed_to_agent") == "response_generator":
+        if result.get("current_node") == "response_generator":
             citations = result.get("citations") or []
             assert len(citations) > 0, (
                 f"No citations for response_generator response to: '{query_text}'"
@@ -156,6 +156,6 @@ def test_unroutable_queries_use_fallback(query_text):
     from src.graph.workflow import graph
 
     result = graph.invoke(_make_initial_state(query_text))
-    assert result.get("routed_to_agent") == "fallback_handler", (
-        f"Expected '{query_text}' to use fallback, got: {result.get('routed_to_agent')}"
+    assert result.get("current_node") == "fallback_handler", (
+        f"Expected '{query_text}' to use fallback, got: {result.get('current_node')}"
     )

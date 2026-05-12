@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from src.graph.state import SupportGraphState
-from src.tools.executor import execute_tool
+from src.tools.orchestrator import execute_tool
 
 
 def action_executor(state: SupportGraphState) -> dict:
     """Execute each planned tool call through the guardrail pipeline."""
     tool_calls = state.get("tool_calls") or []
-    agent_type = state.get("routed_to_agent") or "support"
+    agent_type = state.get("current_node") or "account_agent"
     session_id = state.get("session_id") or state.get("query_id") or "unknown"
     response_text = state.get("response_text") or ""
 

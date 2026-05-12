@@ -155,7 +155,7 @@ def response_generator(state: SupportGraphState) -> dict:
     """Generate a grounded response with citations from merged retrieval results.
 
     Reads: query_text, merged_results, retrieval_confidence, classified_domains, run_id
-    Writes: response_text, citations, routed_to_agent, log_events
+    Writes: response_text, citations, current_node, log_events
     """
 ```
 

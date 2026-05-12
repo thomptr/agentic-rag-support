@@ -19,11 +19,14 @@ from src.api.schemas import (
     ToolCallResult,
 )
 from src.config import settings
-from src.graph.workflow import graph
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.deployment_mode == "cloud":
+        from src.api.agentcore_client import get_client
+
+        get_client()  # warm up the SigV4 session
     yield
 
 
@@ -39,7 +42,9 @@ _ALLOWED_MODELS = {"gpt-4o-mini", "gpt-4o", "claude-sonnet-4-6"}
 
 
 @app.post("/query", response_model=QueryResponse)
-async def query_endpoint(request: QueryRequest) -> QueryResponse:
+def query_endpoint(
+    request: QueryRequest,
+) -> QueryResponse:  # sync — uvicorn runs in a threadpool so concurrent /query requests don't block on each other's AgentCore HTTP call
     if not request.query_text.strip():
         raise HTTPException(status_code=422, detail="query_text must not be empty")
 
@@ -54,6 +59,93 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
 
     session_id = request.session_id or query_id
 
+    start = time.perf_counter()
+
+    if settings.deployment_mode == "cloud":
+        from src.api.agentcore_client import get_client
+
+        agentcore = get_client()
+        raw = agentcore.invoke(
+            prompt=request.query_text,
+            session_id=session_id,
+            model_override=request.model_override,
+            guardrails_enabled=request.guardrails_enabled
+            if request.guardrails_enabled is not None
+            else True,
+        )
+        total_latency_ms = (time.perf_counter() - start) * 1000
+        raw_citations = raw.get("citations") or []
+        citations = [
+            CitationResponse(
+                content=c.get("content", c.get("chunk_text", "")),
+                domain=c.get("domain", ""),
+                source=c.get("source", c.get("source_file", "")),
+                score=float(c.get("score", 0.0)),
+                doc_id=c.get("doc_id", ""),
+                chunk_text=c.get("chunk_text", c.get("content", "")),
+                title=c.get("title", ""),
+                source_file=c.get("source_file", c.get("source", "")),
+            )
+            for c in raw_citations
+        ]
+        # Forward the entrypoint's metadata payload through the API response.
+        # The agent (src/entrypoint/main.py) computes the same fields that
+        # local mode derives further below; we just need to wrap a few lists
+        # into typed Pydantic models.
+        raw_tool_results = raw.get("tool_results") or []
+        tool_calls_resp = [
+            ToolCallResult(
+                tool_name=tr.get("tool_name", ""),
+                status=tr.get("status", ""),
+                result=tr.get("result"),
+                error=tr.get("error"),
+                block_reason=tr.get("block_reason"),
+                approval_id=tr.get("approval_id"),
+            )
+            for tr in raw_tool_results
+        ]
+        raw_pending = raw.get("pending_approvals") or []
+        pending_approvals_resp = [
+            ApprovalItem(
+                id=p.get("id", ""),
+                tool_name=p.get("tool_name", ""),
+                parameters=p.get("parameters", {}),
+                status=p.get("status", "pending"),
+                created_at=p.get("created_at", ""),
+                expires_at=p.get("expires_at", ""),
+            )
+            for p in raw_pending
+        ]
+        return QueryResponse(
+            query_id=query_id,
+            response_text=raw.get("result") or "",
+            agent=raw.get("agent") or "unknown",
+            routing_rationale=raw.get("confidence_rationale"),
+            citations=citations,
+            metadata=QueryMetadata(
+                classified_domain=raw.get("classified_domain"),
+                classified_domains=raw.get("classified_domains") or [],
+                run_id=run_id,
+                total_latency_ms=round(total_latency_ms, 2),
+                llm_calls=raw.get("llm_calls", 0),
+                retrieval_calls=raw.get("retrieval_calls", 0),
+                retrieval_attempts=raw.get("retrieval_attempts", 0),
+                documents_retrieved=len(raw.get("raw_retrieval_results") or []),
+                documents_after_dedup=len(raw.get("merged_results") or []),
+                retrieval_confidence=raw.get("retrieval_confidence"),
+            ),
+            tool_calls=tool_calls_resp,
+            action_taken=bool(raw.get("action_taken")),
+            pending_approvals=pending_approvals_resp,
+            langfuse_trace_id=raw.get("langfuse_trace_id"),
+        )
+
+    # Local mode: invoke graph directly. Lazy import so the cloud-mode API
+    # container doesn't need LangGraph/langchain installed (cloud delegates
+    # graph execution to the AgentCore Runtime). Tests should patch the
+    # source module, e.g. `@patch("src.graph.workflow.graph")`.
+    from src.graph.workflow import graph
+
     initial_state = {
         "query_id": query_id,
         "query_text": request.query_text,
@@ -61,7 +153,7 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
         "classified_domain": None,
         "classified_domains": None,
         "confidence_rationale": None,
-        "routed_to_agent": None,
+        "current_node": None,
         "retrieved_documents": None,
         "response_text": None,
         "citations": None,
@@ -73,19 +165,16 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
         "retrieval_confidence": None,
         "retrieval_attempt": 0,
         "max_retrieval_attempts": settings.max_retrieval_attempts,
-        # Tool execution state (003)
         "session_id": session_id,
         "tool_calls": None,
         "tool_results": None,
         "pending_approvals": None,
         "action_taken": None,
         "action_needed": None,
-        # Per-request overrides (004: frontend)
         "guardrails_enabled": request.guardrails_enabled,
         "model_override": request.model_override,
     }
 
-    start = time.perf_counter()
     result = graph.invoke(initial_state)
     total_latency_ms = (time.perf_counter() - start) * 1000
 
@@ -141,7 +230,7 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
     return QueryResponse(
         query_id=query_id,
         response_text=result.get("response_text") or "",
-        agent=result.get("routed_to_agent") or "unknown",
+        agent=result.get("current_node") or "unknown",
         routing_rationale=result.get("confidence_rationale"),
         citations=citations,
         metadata=QueryMetadata(
