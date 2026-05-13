@@ -19,8 +19,6 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
 
-import boto3
-
 # v2 SDK — wire format matches lambdas/shared/langfuse_client.py (Lambdas pin
 # 2.x; the agent must match so parent_observation_id values are compatible).
 try:
@@ -30,6 +28,11 @@ except ImportError:
 
 
 def _read_secret_string(secret_arn: str, *, region: str | None = None) -> str:
+    # Lazy import — boto3 is only needed at runtime when LANGFUSE_*_REF is
+    # set, NOT at module import. Keeping it lazy means test environments and
+    # local dev without boto3 installed can still import this module.
+    import boto3
+
     client = boto3.client("secretsmanager", region_name=region or os.environ.get("AWS_REGION"))
     resp = client.get_secret_value(SecretId=secret_arn)
     if "SecretString" not in resp:
