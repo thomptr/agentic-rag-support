@@ -1,0 +1,130 @@
+%% AWS deployment topology — agentic RAG support stack on AgentCore.
+%% Companion to langgraph.mmd: that file shows the in-process graph,
+%% this file shows the AWS substrate the graph runs on and the path a
+%% tool call takes from the agent runtime out to a Lambda target.
+%%
+%% Solid edges = synchronous request/response on the hot path.
+%% Dashed edges = configuration, secret reads, or async telemetry.
+
+flowchart LR
+    user([Browser])
+
+    subgraph aws[AWS us-east-1]
+        direction LR
+
+        subgraph vpc[VPC — private + dev-IP-allowlisted public subnets]
+            direction TB
+
+            alb[Application Load Balancer<br/><i>:80 → api, :8501 → frontend</i>]
+
+            subgraph ecs[ECS Fargate — ARM64]
+                frontend[frontend task<br/><i>Streamlit</i>]
+                api[api task<br/><i>FastAPI</i>]
+            end
+
+            rds[(RDS PostgreSQL 16<br/>+ pgvector)]
+        end
+
+        subgraph agentcore[Bedrock AgentCore]
+            runtime[AgentCore Runtime — ARM64<br/><i>hosts LangGraph agent<br/>see langgraph.mmd</i>]
+            gateway[AgentCore Tool Gateway<br/><i>CUSTOM_JWT authorizer</i>]
+        end
+
+        subgraph cognito_grp[Cognito]
+            user_pool[User Pool + Resource Server<br/><i>tools/* scopes</i>]
+            m2m_client[M2M App Client<br/><i>client_credentials only</i>]
+        end
+
+        subgraph lambdas[Tool Lambdas — ARM64]
+            l_create[create_ticket]
+            l_refund[issue_refund]
+            l_order[order_status]
+            shared_layer[/shared Lambda Layer<br/><i>langfuse, tracing, audit</i>/]
+        end
+
+        subgraph secrets_grp[Secrets Manager + KMS]
+            sec_openai[/openai_api_key/]
+            sec_lf_sec[/langfuse_secret_key/]
+            sec_lf_pub[/langfuse_public_key/]
+            sec_m2m[/cognito_m2m_client_secret/]
+        end
+
+        ecr[(ECR<br/><i>api, frontend, runtime images</i>)]
+        cw[(CloudWatch Logs)]
+    end
+
+    langfuse[(Langfuse SaaS<br/><i>traces + spans</i>)]
+    openai[(OpenAI API)]
+
+    %% ── User-facing hot path ──────────────────────────────────────────────
+    user --> alb
+    alb --> frontend
+    alb --> api
+    frontend --> api
+    api -->|SigV4 InvokeAgentRuntime| runtime
+
+    %% ── Agent data dependencies ──────────────────────────────────────────
+    api -->|pgvector retrieval| rds
+    runtime -->|pgvector retrieval| rds
+    runtime -->|LLM completions| openai
+
+    %% ── Tool-call path: Runtime → Gateway → Lambda ───────────────────────
+    runtime -->|OAuth2 client_credentials| m2m_client
+    m2m_client -.->|JWT| runtime
+    runtime -->|MCP + Bearer JWT| gateway
+    gateway -->|JWKS / discovery| user_pool
+    gateway -->|invoke| l_create
+    gateway -->|invoke| l_refund
+    gateway -->|invoke| l_order
+
+    l_create -.-> shared_layer
+    l_refund -.-> shared_layer
+    l_order  -.-> shared_layer
+
+    %% ── Secrets reads (cold start / startup) ─────────────────────────────
+    runtime -.->|read| sec_openai
+    runtime -.->|read| sec_lf_sec
+    runtime -.->|read| sec_lf_pub
+    runtime -.->|read| sec_m2m
+    api     -.->|read| sec_openai
+    api     -.->|read| sec_lf_sec
+    api     -.->|read| sec_lf_pub
+    l_create -.->|read| sec_lf_sec
+    l_refund -.->|read| sec_lf_sec
+    l_order  -.->|read| sec_lf_sec
+
+    %% ── Observability fan-out (trace_id propagated end-to-end) ───────────
+    runtime  -.->|spans| langfuse
+    api      -.->|spans| langfuse
+    l_create -.->|child spans| langfuse
+    l_refund -.->|child spans| langfuse
+    l_order  -.->|child spans| langfuse
+    runtime  -.-> cw
+    l_create -.-> cw
+    l_refund -.-> cw
+    l_order  -.-> cw
+    api      -.-> cw
+    frontend -.-> cw
+
+    %% ── Image pulls ──────────────────────────────────────────────────────
+    ecr -.-> api
+    ecr -.-> frontend
+    ecr -.-> runtime
+
+    classDef edgeNode  fill:#fef3c7,stroke:#d97706,stroke-width:2px
+    classDef computeNode fill:#dbeafe,stroke:#2563eb,stroke-width:1px
+    classDef agentcoreNode fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    classDef authNode  fill:#fce7f3,stroke:#db2777,stroke-width:1px
+    classDef lambdaNode fill:#dcfce7,stroke:#16a34a,stroke-width:1px
+    classDef dataNode  fill:#e0f2fe,stroke:#0284c7,stroke-width:1px
+    classDef secretNode fill:#fee2e2,stroke:#dc2626,stroke-width:1px
+    classDef externalNode fill:#f5f5f4,stroke:#57534e,stroke-width:1px,stroke-dasharray: 3 3
+
+    class alb edgeNode
+    class frontend,api computeNode
+    class runtime,gateway agentcoreNode
+    class user_pool,m2m_client authNode
+    class l_create,l_refund,l_order,shared_layer lambdaNode
+    class rds,ecr,cw dataNode
+    class sec_openai,sec_lf_sec,sec_lf_pub,sec_m2m secretNode
+    class langfuse,openai,user externalNode

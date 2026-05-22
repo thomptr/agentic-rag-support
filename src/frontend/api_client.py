@@ -66,3 +66,17 @@ def health_check() -> bool:
         return True
     except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError):
         return False
+
+
+def get_health() -> dict | None:
+    """Return the parsed /health payload, or None if the backend isn't reachable.
+
+    Used by the sidebar to surface Langfuse init state — silently no-opping
+    observability has bitten us multiple times, so the UI now shows a badge.
+    """
+    try:
+        response = _client.get("/health")
+        response.raise_for_status()
+        return response.json()
+    except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError):
+        return None

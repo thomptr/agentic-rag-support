@@ -13,7 +13,6 @@ import boto3
 import requests
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
-from botocore.credentials import Credentials
 
 from src.config import settings
 
@@ -26,8 +25,11 @@ class AgentCoreClient:
     _INITIAL_BACKOFF = 1.0  # seconds
 
     def __init__(self) -> None:
-        session = boto3.Session(region_name=settings.aws_region)
-        self._credentials: Credentials = session.get_credentials().get_frozen_credentials()
+        # Keep the Session, not a frozen snapshot — ECS task-role credentials
+        # rotate (~6h lifetime via the container metadata endpoint) and a
+        # snapshot taken at __init__ stops signing valid requests once the
+        # underlying creds rotate, producing 403s on every /query thereafter.
+        self._session = boto3.Session(region_name=settings.aws_region)
         self._region = settings.aws_region
         self._endpoint = settings.agentcore_endpoint_url.rstrip("/")
         self._runtime_arn = settings.agentcore_runtime_arn
@@ -72,7 +74,8 @@ class AgentCoreClient:
             data=body,
             headers={"Content-Type": "application/json"},
         )
-        SigV4Auth(self._credentials, "bedrock-agentcore", self._region).add_auth(aws_request)
+        creds = self._session.get_credentials().get_frozen_credentials()
+        SigV4Auth(creds, "bedrock-agentcore", self._region).add_auth(aws_request)
         prepared = requests.Request(
             method="POST",
             url=url,

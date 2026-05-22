@@ -73,3 +73,36 @@ class TestAssessConfidence:
         result = assess_confidence(docs, attempt=settings.max_retrieval_attempts)
         # At max attempts, no more retries regardless of confidence
         assert result["should_retry"] is False
+
+    def test_top_k_mean_ignores_long_tail(self):
+        """Strong top results should pass the gate even when a long tail of
+        marginal matches drags the full average below threshold."""
+        from src.config import settings
+
+        # 3 strong hits + 7 weak ones. With confidence_top_k=3 the gate sees
+        # only the strong ones; the legacy avg-over-all would see 0.32.
+        strong = [{"content": f"s{i}", "score": 0.9, "domain": "billing"} for i in range(3)]
+        tail = [{"content": f"t{i}", "score": 0.1, "domain": "billing"} for i in range(7)]
+        docs = strong + tail
+
+        result = assess_confidence(docs, attempt=1)
+
+        # Gating score = top-3 mean = 0.9; avg_similarity = mean of all 10 = 0.34.
+        assert abs(result["score"] - 0.9) < 1e-6
+        assert abs(result["avg_similarity"] - 0.34) < 1e-6
+        assert result["score"] > result["avg_similarity"]
+        assert result["top_k"] == settings.confidence_top_k
+        assert result["should_retry"] is False
+
+    def test_top_k_clamped_when_fewer_results(self):
+        """top_k should clamp to result_count when fewer results exist."""
+        from src.config import settings
+
+        # Only 2 results — fewer than configured top_k (3).
+        docs = [{"content": f"doc {i}", "score": 0.8, "domain": "billing"} for i in range(2)]
+        result = assess_confidence(docs, attempt=1)
+
+        assert result["top_k"] == 2
+        assert result["top_k"] <= settings.confidence_top_k
+        # Score is the mean of however many we have.
+        assert abs(result["score"] - 0.8) < 1e-6

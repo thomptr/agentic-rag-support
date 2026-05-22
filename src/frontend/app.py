@@ -28,9 +28,12 @@ def _init_session_state() -> None:
         st.session_state.selected_customer = "cust-001"
     if "pending_query" not in st.session_state:
         st.session_state.pending_query = None
+    if "last_error" not in st.session_state:
+        st.session_state.last_error = None
 
 
 def _submit_query(query_text: str) -> None:
+    st.session_state.last_error = None
     st.session_state.messages.append({"role": "user", "content": query_text})
 
     with st.spinner("Thinking..."):
@@ -48,18 +51,23 @@ def _submit_query(query_text: str) -> None:
             st.session_state.last_trace = result
             st.session_state.pending_approvals = result.get("pending_approvals", [])
         except httpx.ConnectError:
-            st.error(
+            # Error strings are stashed in session_state (not rendered via
+            # st.error here) so they survive the st.rerun() that fires after
+            # this function returns. The banner is rendered from main().
+            st.session_state.last_error = (
                 "Could not connect to the backend. "
                 "Make sure the FastAPI server is running on port 8000: "
                 "`uvicorn src.api.main:app --reload --port 8000`"
             )
         except httpx.TimeoutException:
-            st.error(
+            st.session_state.last_error = (
                 "The request timed out after 30 seconds. "
                 "The backend may be busy — please try again."
             )
         except httpx.HTTPStatusError as exc:
-            st.error(f"Backend returned an error ({exc.response.status_code}): {exc.response.text}")
+            st.session_state.last_error = (
+                f"Backend returned an error ({exc.response.status_code}): {exc.response.text}"
+            )
 
 
 def _render_welcome() -> None:
@@ -132,6 +140,9 @@ def main() -> None:
 
     with chat_col:
         st.title("Agentic RAG Support Demo")
+
+        if st.session_state.last_error:
+            st.error(st.session_state.last_error)
 
         if not st.session_state.messages:
             _render_welcome()
