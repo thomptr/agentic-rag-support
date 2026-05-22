@@ -16,11 +16,19 @@ flowchart TD
         confidence_check[confidence_check<br/><i>score retrieval quality</i>]
     end
 
-    subgraph generation[Response Generation]
-        response_generator[response_generator<br/><i>grounded answer + citations</i>]
-        validate_response[validate_response]
+    subgraph domain_agents[Domain Response Agents]
+        billing_agent[billing_agent]
+        technical_agent[technical_agent]
+        account_agent[account_agent]
+        response_generator[response_generator<br/><i>unknown-domain fallback</i>]
     end
 
+    subgraph action[Action Path]
+        action_planner[action_planner<br/><i>select tool + args</i>]
+        action_executor[action_executor<br/><i>invoke via AgentCore Gateway</i>]
+    end
+
+    validate_response[validate_response<br/><i>citations + safety</i>]
     fallback_handler[fallback_handler<br/><i>unroutable queries</i>]
     escalation_handler[escalation_handler<br/><i>route to human / security team</i>]
 
@@ -36,18 +44,36 @@ flowchart TD
     multi_retriever --> confidence_check
 
     confidence_check -.->|retry| retrieval_planner
-    confidence_check -.->|sufficient| response_generator
+    confidence_check -.->|billing| billing_agent
+    confidence_check -.->|technical| technical_agent
+    confidence_check -.->|account| account_agent
+    confidence_check -.->|unknown| response_generator
 
-    response_generator --> validate_response
+    billing_agent -.->|action_needed| action_planner
+    technical_agent -.->|action_needed| action_planner
+    account_agent -.->|action_needed| action_planner
+    response_generator -.->|action_needed| action_planner
+
+    billing_agent -.->|no action| validate_response
+    technical_agent -.->|no action| validate_response
+    account_agent -.->|no action| validate_response
+    response_generator -.->|no action| validate_response
+
+    action_planner --> action_executor
+    action_executor --> validate_response
+
     validate_response --> END_NODE
-
     fallback_handler --> END_NODE
     escalation_handler --> END_NODE
 
     classDef policyNode fill:#fef3c7,stroke:#d97706,stroke-width:2px
     classDef pipelineNode fill:#dbeafe,stroke:#2563eb,stroke-width:1px
+    classDef domainNode fill:#dcfce7,stroke:#16a34a,stroke-width:1px
+    classDef actionNode fill:#ede9fe,stroke:#7c3aed,stroke-width:1px
     classDef terminalNode fill:#fee2e2,stroke:#dc2626,stroke-width:1px
 
     class supervisor,security_check policyNode
-    class retrieval_planner,multi_retriever,confidence_check,response_generator,validate_response pipelineNode
+    class retrieval_planner,multi_retriever,confidence_check,validate_response pipelineNode
+    class billing_agent,technical_agent,account_agent,response_generator domainNode
+    class action_planner,action_executor actionNode
     class fallback_handler,escalation_handler terminalNode

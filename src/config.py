@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # RAG retrieval quality thresholds
-    confidence_threshold: float = 0.6
+    confidence_threshold: float = 0.45
+    confidence_top_k: int = 3  # gate on mean of top-K scores, not full avg
     min_result_count: int = 3
     max_retrieval_attempts: int = 3
     max_context_documents: int = 20

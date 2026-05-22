@@ -2,12 +2,55 @@
 
 import streamlit as st
 
+from src.frontend import api_client
 from src.frontend.scenarios import CUSTOMER_PROFILES, SCENARIOS_BY_CATEGORY
+
+
+def _render_backend_status() -> None:
+    """Show backend reachability + Langfuse init status.
+
+    Cached for the lifetime of the Streamlit session so we don't hit /health
+    on every rerun, but exposes a "Refresh" button so a developer who just
+    rotated keys doesn't have to restart Streamlit to see the new state.
+    """
+    if "backend_health" not in st.session_state or st.session_state.get("refresh_health"):
+        st.session_state.backend_health = api_client.get_health()
+        st.session_state.refresh_health = False
+
+    health = st.session_state.backend_health
+
+    if health is None:
+        st.error("Backend unreachable — start `uvicorn src.api.main:app --port 8000`.")
+        if st.button("Retry", key="health_retry", use_container_width=True):
+            st.session_state.refresh_health = True
+            st.rerun()
+        return
+
+    lf = health.get("langfuse", {}) or {}
+    state = lf.get("state", "disabled")
+    if state == "ok":
+        st.success(
+            f"Langfuse: connected ({lf.get('source', '?')}) — {lf.get('host', '')}",
+            icon="✅",
+        )
+    elif state == "failed":
+        st.error(f"Langfuse: init FAILED — {lf.get('reason', 'unknown')}", icon="🔴")
+    else:
+        st.warning(
+            f"Langfuse: disabled — {lf.get('reason', 'no credentials')}. "
+            "Traces will NOT be captured.",
+            icon="⚠️",
+        )
+    if st.button("Refresh status", key="health_refresh", use_container_width=True):
+        st.session_state.refresh_health = True
+        st.rerun()
 
 
 def render_sidebar() -> None:
     with st.sidebar:
         st.markdown("## Demo Controls")
+        _render_backend_status()
+        st.markdown("---")
 
         # Customer selector
         customer_names = {p.id: p.name for p in CUSTOMER_PROFILES}

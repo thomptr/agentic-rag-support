@@ -11,6 +11,7 @@ from src.api.schemas import (
     ApproveRequest,
     CitationResponse,
     HealthResponse,
+    LangfuseStatus,
     QueryMetadata,
     QueryRequest,
     QueryResponse,
@@ -145,6 +146,7 @@ def query_endpoint(
     # graph execution to the AgentCore Runtime). Tests should patch the
     # source module, e.g. `@patch("src.graph.workflow.graph")`.
     from src.graph.workflow import graph
+    from src.observability import langfuse_init
 
     initial_state = {
         "query_id": query_id,
@@ -175,7 +177,26 @@ def query_endpoint(
         "model_override": request.model_override,
     }
 
-    result = graph.invoke(initial_state)
+    # Open the parent Langfuse trace for this invocation — mirrors what the
+    # cloud entrypoint (src/entrypoint/main.py) does for AgentCore Runtime.
+    # Without this, every span()/generation() call inside the graph nodes sees
+    # no parent and no-ops, leaving local-mode Streamlit traffic invisible in
+    # Langfuse even when credentials are configured correctly.
+    langfuse_trace_id: str | None = None
+    with langfuse_init.trace(
+        name="agent.invoke",
+        input_payload={"query": request.query_text, "session_id": session_id},
+        metadata={
+            "deployment_mode": settings.deployment_mode,
+            "model_override": request.model_override,
+            "guardrails_enabled": request.guardrails_enabled,
+        },
+        session_id=session_id,
+    ) as parent_trace:
+        result = graph.invoke(initial_state)
+        if parent_trace is not None:
+            langfuse_trace_id = parent_trace.id
+            parent_trace.update(output={"response_text": result.get("response_text") or ""})
     total_latency_ms = (time.perf_counter() - start) * 1000
 
     log_events = result.get("log_events", [])
@@ -248,6 +269,7 @@ def query_endpoint(
         tool_calls=tool_calls_resp,
         action_taken=bool(result.get("action_taken")),
         pending_approvals=pending_approvals_resp,
+        langfuse_trace_id=langfuse_trace_id,
     )
 
 
@@ -328,9 +350,15 @@ async def health_endpoint() -> HealthResponse:
     if settings.openai_api_key and settings.openai_api_key.startswith("sk-"):
         llm_status = "configured"
 
+    # Surface Langfuse init state so the Streamlit sidebar (and any external
+    # monitor) can show a red badge when traces aren't going to land — the
+    # previous behavior of silently no-opping has bitten us multiple times.
+    from src.observability import langfuse_init as _lf
+
     return HealthResponse(
         status="healthy",
         database=db_status,
         vector_store=vs_status,
         llm=llm_status,
+        langfuse=LangfuseStatus(**_lf.init_status),
     )

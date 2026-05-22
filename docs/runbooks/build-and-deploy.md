@@ -204,7 +204,9 @@ If any test fails, see "Common failure modes" below.
 
 ### `403 Forbidden` from AgentCore Runtime invocations
 
-Two distinct causes — check both:
+Three distinct causes — check in this order. Causes 1 and 2 are easy to
+rule out via control-plane inspection; cause 3 only shows up under a
+specific pattern (worked-then-broke without redeploy).
 
 1. **The DEFAULT endpoint version drifted.** `list_agent_runtime_endpoints`
    should show `liveVersion` matching the current runtime version. If
@@ -217,6 +219,24 @@ Two distinct causes — check both:
    ```bash
    aws iam get-role-policy --role-name dev-agentic-rag-ecs-task-role \
      --policy-name dev-agentic-rag-ecs-task-agentcore --region us-east-1
+   ```
+   `aws iam simulate-principal-policy` against the task-role ARN gives a
+   definitive `allowed`/`implicitDeny` — if both causes 1 and 2 look fine
+   *and* the simulator says `allowed`, jump to cause 3.
+3. **Stale credentials in the API client.** The ECS task-role credentials
+   from the container metadata endpoint rotate (~6h). If `AgentCoreClient`
+   snapshots them once at `__init__` and reuses that snapshot, signatures
+   start failing the moment the underlying creds rotate — typically after
+   ~5h of healthy operation followed by 403 on every subsequent `/query`,
+   with no infra/IAM change in between. Diagnose by looking for a 200→500
+   transition in `/ecs/dev/api` logs that lines up with a credential
+   lifetime boundary rather than with a deploy. Fix: hold the
+   `boto3.Session` and call `.get_credentials().get_frozen_credentials()`
+   per request (see [src/api/agentcore_client.py](../../src/api/agentcore_client.py)).
+   Force a new deployment afterwards so the new task picks up the fix:
+   ```bash
+   aws ecs update-service --cluster dev-agentic-rag --service dev-api \
+     --force-new-deployment --region us-east-1
    ```
 
 ### ECS task crashloops, `EssentialContainerExited`

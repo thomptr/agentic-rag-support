@@ -69,11 +69,22 @@ class QueryResponse(BaseModel):
     langfuse_trace_id: str | None = None
 
 
+class LangfuseStatus(BaseModel):
+    # "ok" — client initialized and traces will land in the Langfuse UI.
+    # "disabled" — credentials absent; local-mode traffic is invisible.
+    # "failed" — credentials present but init raised (e.g. bad rotation).
+    state: str
+    source: str = ""  # "secrets_manager" | "env" | ""
+    host: str = ""
+    reason: str = ""
+
+
 class HealthResponse(BaseModel):
     status: str
     database: str
     vector_store: str
     llm: str
+    langfuse: LangfuseStatus
 
 
 # Approval API schemas

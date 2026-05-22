@@ -15,9 +15,30 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
+
+# Best-effort `.env` load so local-mode entry points (Streamlit, the FastAPI
+# `/query` server, ad-hoc scripts) see LANGFUSE_* env vars without each one
+# having to remember to call `load_dotenv()` themselves. `override=False` means
+# cloud-mode envs (set by AgentCore Runtime / ECS task definitions) win — this
+# is purely a local-dev convenience that the cloud path never sees.
+#
+# Skipped when running under pytest so test fixtures retain full control over
+# which LANGFUSE_* vars are visible — auto-loading `.env` during tests would
+# silently inject real credentials and break monkeypatch-based init scenarios.
+# We use `"pytest" in sys.modules` (set from pytest startup) rather than
+# `PYTEST_CURRENT_TEST` (only set during the test phase, not collection — and
+# this module gets imported during collection).
+if "pytest" not in sys.modules:
+    try:
+        from dotenv import load_dotenv as _load_dotenv
+
+        _load_dotenv(override=False)
+    except ImportError:
+        pass
 
 # v2 SDK — wire format matches lambdas/shared/langfuse_client.py (Lambdas pin
 # 2.x; the agent must match so parent_observation_id values are compatible).
@@ -47,31 +68,97 @@ def _parse_secret_field(raw: str, field: str) -> str:
     return parsed[field]
 
 
+# Public init status — read by /health and the Streamlit sidebar so a misconfig
+# surfaces in the UI instead of just CloudWatch. Updated once at cold start.
+# Shape: {"state": "ok"|"disabled"|"failed", "source": "secrets_manager"|"env"|"",
+#         "host": "...", "reason": "..." (only when state != "ok")}.
+init_status: dict[str, str] = {
+    "state": "disabled",
+    "source": "",
+    "host": "",
+    "reason": "not_initialized",
+}
+
+
 def _init_langfuse():
     """Cold-start initialization. Returns a Langfuse client or None.
 
-    Missing credentials are non-fatal — the helpers below all no-op when the
-    client is None, so the agent still serves traffic. The init outcome is
-    printed once at cold start so a developer can grep CloudWatch for it.
+    Two credential sources are supported, checked in order:
+      1. LANGFUSE_*_REF (Secrets Manager ARNs) — the cloud path; SDK creds are
+         pulled from Secrets Manager so they're never baked into env vars.
+      2. LANGFUSE_SECRET_KEY / LANGFUSE_PUBLIC_KEY (raw values) — the local
+         dev path; lets a `.env` drive Langfuse without round-tripping through
+         AWS. `LANGFUSE_BASE_URL` is accepted as an alias for `LANGFUSE_HOST`
+         since that's the name the Langfuse dashboard hands you.
+
+    `LANGFUSE_REQUIRED=true` makes init failures fatal — use it in CI and any
+    environment where silently losing traces is unacceptable. The default
+    behavior remains best-effort because we never want a bad rotation to take
+    down the agent in production.
     """
+    required = os.environ.get("LANGFUSE_REQUIRED", "").strip().lower() in {"1", "true", "yes"}
+
+    def _fail(reason: str, *, exc: BaseException | None = None) -> None:
+        msg = f"LANGFUSE_INIT_{('FAILED' if exc else 'SKIPPED')}: {reason}"
+        if exc is not None:
+            msg += f" ({exc!r})"
+        print(msg)
+        init_status["state"] = "failed" if exc else "disabled"
+        init_status["reason"] = reason
+        if required:
+            raise RuntimeError(
+                f"LANGFUSE_REQUIRED is set but init failed: {reason}"
+                + (f" — {exc!r}" if exc else "")
+            )
+
     if Langfuse is None:
-        print("LANGFUSE_INIT_SKIPPED: SDK not installed in this environment")
+        _fail("SDK not installed in this environment")
         return None
     secret_arn = os.environ.get("LANGFUSE_SECRET_REF", "").strip()
     public_arn = os.environ.get("LANGFUSE_PUBLIC_REF", "").strip()
-    host = os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com").strip()
-    if not secret_arn or not public_arn:
-        print("LANGFUSE_INIT_SKIPPED: missing LANGFUSE_*_REF env vars")
+    host = (
+        os.environ.get("LANGFUSE_HOST", "").strip()
+        or os.environ.get("LANGFUSE_BASE_URL", "").strip()
+        or "https://cloud.langfuse.com"
+    )
+    init_status["host"] = host
+
+    secret_key: str | None = None
+    public_key: str | None = None
+    source = ""
+
+    if secret_arn and public_arn:
+        source = "secrets_manager"
+        try:
+            secret_key = _parse_secret_field(_read_secret_string(secret_arn), "LANGFUSE_SECRET_KEY")
+            public_key = _parse_secret_field(_read_secret_string(public_arn), "LANGFUSE_PUBLIC_KEY")
+        except Exception as exc:  # noqa: BLE001
+            _fail("secrets_manager fetch", exc=exc)
+            return None
+    else:
+        raw_secret = os.environ.get("LANGFUSE_SECRET_KEY", "").strip()
+        raw_public = os.environ.get("LANGFUSE_PUBLIC_KEY", "").strip()
+        if raw_secret and raw_public:
+            source = "env"
+            secret_key = raw_secret
+            public_key = raw_public
+
+    if not secret_key or not public_key:
+        _fail(
+            "no credentials (set LANGFUSE_*_REF for cloud or "
+            "LANGFUSE_SECRET_KEY/LANGFUSE_PUBLIC_KEY for local)"
+        )
         return None
 
     try:
-        secret_key = _parse_secret_field(_read_secret_string(secret_arn), "LANGFUSE_SECRET_KEY")
-        public_key = _parse_secret_field(_read_secret_string(public_arn), "LANGFUSE_PUBLIC_KEY")
         client = Langfuse(secret_key=secret_key, public_key=public_key, host=host)
-        print(f"LANGFUSE_INIT_OK: host={host}")
+        print(f"LANGFUSE_INIT_OK: host={host} source={source}")
+        init_status["state"] = "ok"
+        init_status["source"] = source
+        init_status["reason"] = ""
         return client
     except Exception as exc:  # noqa: BLE001
-        print(f"LANGFUSE_INIT_FAILED: {exc!r}")
+        _fail("Langfuse client construction", exc=exc)
         return None
 
 

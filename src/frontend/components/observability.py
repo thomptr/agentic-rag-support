@@ -12,6 +12,15 @@ def render_observability(trace: dict | None) -> None:
 
     metadata = trace.get("metadata", {})
 
+    # Trace id banner. A populated id means the Langfuse parent span landed —
+    # missing it after we said init was "ok" in the sidebar means the trace
+    # context manager went down the no-op path, which is the bug we just fixed.
+    langfuse_trace_id = trace.get("langfuse_trace_id")
+    if langfuse_trace_id:
+        st.caption(f"Langfuse trace id: `{langfuse_trace_id}`")
+    else:
+        st.caption("⚠️ No Langfuse trace id returned for this request — check the sidebar status.")
+
     # Metrics summary row
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Latency (ms)", f"{metadata.get('total_latency_ms', 0):.0f}")
